@@ -1,0 +1,7 @@
+{
+  "name": "菜场小站 (Veggie Station)",
+  "description": "A community-based mini vegetable market app. Users can become station masters to sell produce, or customers to buy fresh food with delivery scheduling.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
