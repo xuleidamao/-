@@ -1,3 +1,4 @@
+
 import { 
   ShoppingBag, 
   Store, 
@@ -28,7 +29,26 @@ import {
   LogIn,
   Map,
   Navigation,
-  MessageCircle
+  MessageCircle,
+  Search,
+  Archive,
+  Layers,
+  LayoutGrid,
+  Refrigerator,
+  History,
+  AlertTriangle,
+  Calendar,
+  Trash,
+  BookOpen,
+  Heart,
+  ChefHat,
+  ListPlus,
+  Sparkles,
+  ClipboardList,
+  Lock,
+  Unlock,
+  Bell,
+  BellRing
 } from 'lucide-react';
 
 export {
@@ -61,5 +81,24 @@ export {
   LogIn,
   Map,
   Navigation,
-  MessageCircle
+  MessageCircle,
+  Search,
+  Archive,
+  Layers,
+  LayoutGrid,
+  Refrigerator,
+  History,
+  AlertTriangle,
+  Calendar,
+  Trash,
+  BookOpen,
+  Heart,
+  ChefHat,
+  ListPlus,
+  Sparkles,
+  ClipboardList,
+  Lock,
+  Unlock,
+  Bell,
+  BellRing
 };

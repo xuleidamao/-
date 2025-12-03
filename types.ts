@@ -1,3 +1,4 @@
+
 export interface Product {
   id: string;
   stationId: string;
@@ -9,6 +10,7 @@ export interface Product {
   video?: string; // Base64 or URL
   stock: number;
   category: string;
+  isAvailable: boolean; // New: Shelf status
   // New Fields for Consignment
   commissionRate?: number; // Percentage (0-100)
   isConsigned?: boolean;
@@ -17,6 +19,13 @@ export interface Product {
 
 export interface CartItem extends Product {
   quantity: number;
+}
+
+export interface ShoppingListItem {
+  id: string;
+  name: string;
+  quantity: number;
+  unit: string;
 }
 
 export enum OrderStatus {
@@ -55,6 +64,7 @@ export interface Station {
   phone?: string;         // New: Owner Phone
   location?: Location;    // New: Geo Location
   wechatOpenId?: string;  // New: WeChat Binding ID
+  categories?: string[];  // New: Custom Categories
 }
 
 export type SalesStat = {
@@ -75,4 +85,29 @@ export interface CustomerAddress {
   isDefault: boolean;
   contactName: string; // New
   phone: string;       // New
+}
+
+export interface PurchasedItem {
+  id: string;
+  productId: string;
+  name: string;
+  image: string;
+  category: string;
+  quantity: number;
+  purchaseDate: number;
+  expiryDate: number; // Estimated expiry
+  customerPhone: string;
+  isDeleted: boolean; // Soft delete for "Basket", keep for "History"
+  isLocked?: boolean; // New: Inventory Lock
+  threshold?: number; // New: Low stock threshold
+}
+
+export interface Recipe {
+  id: string;
+  name: string;
+  image: string;
+  description: string;
+  ingredients: { name: string; amount: string }[];
+  steps: string[];
+  tags: string[]; // e.g., "家常菜", "快手菜"
 }

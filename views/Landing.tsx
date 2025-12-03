@@ -4,37 +4,6 @@ import { Store, ShoppingBag, QrCode, Upload, CheckCircle, ChevronLeft, User, Log
 import { store } from '../services/store';
 import { Station } from '../types';
 
-// Background Slideshow Component
-const BackgroundSlideshow = () => {
-  const images = [
-    'https://file.moyublog.com/d/file/2019-03-02/2012025652680563.jpg',
-    'https://img.zcool.cn/community/01d4df572863926ac7251343734e56.jpg@1280w_1l_2o_100sh.jpg',
-    'https://img.zcool.cn/community/0178875955be32a8012193a3889047.jpg@1280w_1l_2o_100sh.jpg'
-  ];
-  const [index, setIndex] = useState(0);
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setIndex((prev) => (prev + 1) % images.length);
-    }, 5000);
-    return () => clearInterval(timer);
-  }, [images.length]);
-
-  return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-       {images.map((src, i) => (
-         <div 
-           key={i}
-           className={`absolute inset-0 bg-cover bg-center transition-opacity duration-1000 ${i === index ? 'opacity-100' : 'opacity-0'}`}
-           style={{ backgroundImage: `url(${src})` }}
-         />
-       ))}
-       {/* Enhanced gradient overlay for better text readability */}
-       <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-black/70 backdrop-blur-[2px]"></div>
-    </div>
-  );
-};
-
 export const Landing: React.FC = () => {
   const navigate = useNavigate();
   const [viewMode, setViewMode] = useState<'menu' | 'login' | 'register' | 'nearby'>('menu');
@@ -163,9 +132,6 @@ export const Landing: React.FC = () => {
   const handleWeChatLogin = () => {
      // 1. Simulate getting WeChat Auth (OpenID)
      const mockOpenId = "wx_openid_" + Math.random().toString(36).substring(7);
-     // For demo consistency, let's use a fixed one for a "demo user" if needed, 
-     // but random is better to show the binding flow.
-     // Let's assume if it's the very first time, we won't find it.
      
      const station = store.findStationByWeChat(mockOpenId);
      
@@ -253,45 +219,52 @@ export const Landing: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen relative flex flex-col items-center justify-center p-6 text-white overflow-hidden bg-gray-900 w-full">
-      <BackgroundSlideshow />
+    <div className="min-h-screen relative flex flex-col items-center justify-center p-6 text-white overflow-hidden w-full bg-gradient-to-br from-emerald-500 via-green-600 to-teal-700">
       
+      {/* Decorative background elements */}
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+         <div className="absolute -top-[20%] -left-[10%] w-[50%] h-[50%] bg-white/10 rounded-full blur-3xl"></div>
+         <div className="absolute top-[40%] -right-[10%] w-[60%] h-[60%] bg-yellow-400/10 rounded-full blur-3xl"></div>
+      </div>
+
       <div className="relative z-10 w-full max-w-md flex flex-col items-center h-full max-h-screen">
         {/* Title Section */}
         <div className={`text-center transition-all duration-500 shrink-0 ${viewMode === 'menu' ? 'mb-12 mt-10' : 'mb-4 mt-6 scale-90'}`}>
-          <div className="inline-flex items-center justify-center bg-white/20 p-4 rounded-full backdrop-blur-sm mb-4 shadow-xl border border-white/10">
-             <span className="text-5xl">🥗</span>
+          <div className="inline-flex items-center justify-center bg-white/20 p-5 rounded-3xl backdrop-blur-md mb-6 shadow-lg border border-white/20">
+             <span className="text-6xl drop-shadow-sm">🥬</span>
           </div>
-          <h1 className="text-5xl font-bold mb-2 drop-shadow-md tracking-tight">菜场小站</h1>
-          <p className="opacity-90 text-lg font-light tracking-widest border-t border-white/30 pt-2 inline-block px-4">
+          <h1 className="text-4xl font-extrabold mb-3 tracking-tight text-white drop-shadow-md">菜场小站</h1>
+          <p className="text-green-50 bg-white/10 px-4 py-1 rounded-full text-sm font-medium tracking-wide backdrop-blur-sm border border-white/10">
             社区生鲜 · 邻里共享
           </p>
         </div>
 
         {/* Menu View */}
         {viewMode === 'menu' && (
-          <div className="w-full space-y-4 animate-in slide-in-from-bottom-8 duration-500 pb-10 overflow-y-auto no-scrollbar px-1">
+          <div className="w-full space-y-4 pb-10 overflow-y-auto no-scrollbar px-1">
+             {/* Station Manager Login */}
              <button 
                onClick={() => setViewMode('login')}
-               className="w-full bg-white text-green-800 p-5 rounded-2xl shadow-xl hover:scale-105 transition-transform flex items-center justify-between group"
+               className="w-full bg-white/95 backdrop-blur-xl text-green-900 p-5 rounded-2xl shadow-lg border border-white/50 flex items-center justify-between group active:scale-[0.98] transition-all"
              >
                 <div className="flex items-center gap-4">
-                  <div className="bg-green-100 p-3 rounded-xl">
-                    <LogIn className="w-6 h-6 text-green-600" />
+                  <div className="bg-green-100 p-3 rounded-xl text-green-600">
+                    <LogIn className="w-6 h-6" />
                   </div>
                   <div className="text-left">
                     <h3 className="font-bold text-lg">我是站长</h3>
-                    <p className="text-xs text-gray-500">已有小站，点击登录管理</p>
+                    <p className="text-xs text-gray-500 mt-0.5">已有小站，点击登录管理</p>
                   </div>
                 </div>
-                <div className="text-gray-300 group-hover:text-green-600 transition-colors">
-                   <ChevronLeft className="rotate-180 w-6 h-6" />
+                <div className="text-gray-300">
+                   <ChevronLeft className="rotate-180 w-5 h-5" />
                 </div>
              </button>
 
+             {/* Register */}
              <button 
                onClick={() => setViewMode('register')}
-               className="w-full bg-gradient-to-r from-yellow-400 to-orange-500 text-white p-5 rounded-2xl shadow-xl hover:scale-105 transition-transform flex items-center justify-between group"
+               className="w-full bg-gradient-to-r from-orange-400 to-orange-500 text-white p-5 rounded-2xl shadow-lg flex items-center justify-between group active:scale-[0.98] transition-all"
              >
                 <div className="flex items-center gap-4">
                   <div className="bg-white/20 p-3 rounded-xl">
@@ -299,35 +272,37 @@ export const Landing: React.FC = () => {
                   </div>
                   <div className="text-left">
                     <h3 className="font-bold text-lg">我要当站长</h3>
-                    <p className="text-xs text-white/80">实名认证，0成本开店</p>
+                    <p className="text-xs text-orange-100 mt-0.5">实名认证，0成本开店</p>
                   </div>
                 </div>
-                <div className="text-white/50 group-hover:text-white transition-colors">
-                   <ChevronLeft className="rotate-180 w-6 h-6" />
+                <div className="text-white/50">
+                   <ChevronLeft className="rotate-180 w-5 h-5" />
                 </div>
              </button>
 
+             {/* Nearby */}
              <button 
                onClick={() => setViewMode('nearby')}
-               className="w-full bg-blue-600/90 backdrop-blur-md border border-white/10 text-white p-5 rounded-2xl hover:bg-blue-600 transition-all flex items-center justify-between group"
+               className="w-full bg-blue-600/90 backdrop-blur-xl text-white p-5 rounded-2xl shadow-lg border border-white/10 flex items-center justify-between group active:scale-[0.98] transition-all"
              >
                 <div className="flex items-center gap-4">
-                  <div className="bg-white/10 p-3 rounded-xl">
+                  <div className="bg-white/20 p-3 rounded-xl">
                     <Map className="w-6 h-6 text-white" />
                   </div>
                   <div className="text-left">
                     <h3 className="font-bold text-lg">附近的小站</h3>
-                    <p className="text-xs text-blue-200">查看地图，发现身边美食</p>
+                    <p className="text-xs text-blue-100 mt-0.5">查看地图，发现身边美食</p>
                   </div>
                 </div>
-                <div className="text-white/50 group-hover:text-white transition-colors">
-                   <ChevronLeft className="rotate-180 w-6 h-6" />
+                <div className="text-white/50">
+                   <ChevronLeft className="rotate-180 w-5 h-5" />
                 </div>
              </button>
 
+             {/* Customer Demo */}
              <button 
                onClick={handleEnterShop}
-               className="w-full bg-white/10 backdrop-blur-md border border-white/20 text-white p-5 rounded-2xl hover:bg-white/20 transition-all flex items-center justify-between group"
+               className="w-full bg-white/10 backdrop-blur-md border border-white/20 text-white p-5 rounded-2xl shadow-lg flex items-center justify-between group active:scale-[0.98] transition-all"
              >
                 <div className="flex items-center gap-4">
                   <div className="bg-white/10 p-3 rounded-xl">
@@ -335,11 +310,11 @@ export const Landing: React.FC = () => {
                   </div>
                   <div className="text-left">
                     <h3 className="font-bold text-lg">我是顾客</h3>
-                    <p className="text-xs text-gray-200">去逛逛 (功能演示)</p>
+                    <p className="text-xs text-gray-200 mt-0.5">去逛逛 (功能演示)</p>
                   </div>
                 </div>
-                <div className="text-white/50 group-hover:text-white transition-colors">
-                   <ChevronLeft className="rotate-180 w-6 h-6" />
+                <div className="text-white/50">
+                   <ChevronLeft className="rotate-180 w-5 h-5" />
                 </div>
              </button>
           </div>
@@ -347,7 +322,7 @@ export const Landing: React.FC = () => {
 
         {/* Login View */}
         {viewMode === 'login' && (
-          <div className="w-full bg-white rounded-2xl p-6 shadow-xl text-gray-800 animate-in zoom-in-95 duration-300">
+          <div className="w-full bg-white rounded-2xl p-6 shadow-2xl text-gray-800 animate-in zoom-in-95 duration-200">
              <div className="flex items-center justify-between mb-6">
                 <button 
                   onClick={() => {
@@ -435,7 +410,7 @@ export const Landing: React.FC = () => {
 
         {/* Register View */}
         {viewMode === 'register' && (
-          <div className="w-full bg-white rounded-2xl p-6 shadow-xl text-gray-800 animate-in zoom-in-95 duration-300 max-h-[70vh] overflow-y-auto">
+          <div className="w-full bg-white rounded-2xl p-6 shadow-2xl text-gray-800 animate-in zoom-in-95 duration-200 max-h-[70vh] overflow-y-auto">
              <div className="flex items-center justify-between mb-6">
                 <button onClick={() => setViewMode('menu')} className="text-gray-400 hover:text-green-600">
                   <ChevronLeft size={24} />
@@ -549,7 +524,7 @@ export const Landing: React.FC = () => {
 
         {/* Nearby View */}
         {viewMode === 'nearby' && (
-           <div className="w-full h-full bg-white rounded-2xl flex flex-col shadow-xl animate-in zoom-in-95 duration-300 overflow-hidden">
+           <div className="w-full h-full bg-white rounded-2xl flex flex-col shadow-2xl animate-in zoom-in-95 duration-200 overflow-hidden">
               {/* Header */}
               <div className="p-4 bg-blue-600 text-white flex justify-between items-center shadow-md z-10">
                  <button onClick={() => setViewMode('menu')} className="hover:bg-blue-500 p-1 rounded-full">

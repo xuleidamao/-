@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { Package, Plus, TrendingUp, Truck, Share2, Store, Clock, Eye, Camera, Settings, QrCode, MapPin, CheckCircle, LogOut, Users, RefreshCw, X, User, Map, Navigation } from '../components/ui/Icons';
-import { store } from '../services/store';
+import { Package, Plus, TrendingUp, Truck, Share2, Store, Clock, Eye, Camera, Settings, QrCode, MapPin, CheckCircle, LogOut, Users, RefreshCw, X, User, Map, Navigation, Search, Archive, Layers, AlertTriangle } from '../components/ui/Icons';
+import { store, DEFAULT_CATEGORIES } from '../services/store';
 import { generateProductDescription, identifyProductFromImage } from '../services/geminiService';
 import { Station, Product, Order, OrderStatus, ProductSalesRank } from '../types';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
@@ -15,13 +16,21 @@ export const ManagerDashboard: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [stats, setStats] = useState<any>(null);
 
+  // Product Filter State
+  const [productSearch, setProductSearch] = useState('');
+
   // New Product State
   const [isAddingProduct, setIsAddingProduct] = useState(false);
-  const [newProduct, setNewProduct] = useState<Partial<Product>>({ category: '蔬菜', commissionRate: 0 });
+  const [newProduct, setNewProduct] = useState<Partial<Product>>({ category: '蔬菜', commissionRate: 0, stock: 99 });
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [yesterdayPrice, setYesterdayPrice] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Custom Category State
+  const [stationCategories, setStationCategories] = useState<string[]>([]);
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
 
   // Partner State
   const [partners, setPartners] = useState<Station[]>([]);
@@ -46,6 +55,7 @@ export const ManagerDashboard: React.FC = () => {
         if (s.location) {
           setLocationStatus(s.location);
         }
+        setStationCategories(s.categories || DEFAULT_CATEGORIES);
       }
       refreshData();
     }
@@ -107,16 +117,31 @@ export const ManagerDashboard: React.FC = () => {
       description: newProduct.description || '新鲜好菜',
       image: newProduct.image || `https://picsum.photos/seed/${Date.now()}/300/300`,
       category: newProduct.category || '蔬菜',
-      stock: 100,
+      stock: newProduct.stock || 50,
       video: newProduct.video,
       commissionRate: newProduct.commissionRate || 0,
-      isConsigned: false
+      isConsigned: false,
+      isAvailable: true
     };
 
     store.addProduct(product);
     setIsAddingProduct(false);
-    setNewProduct({ category: '蔬菜', commissionRate: 0 });
+    setNewProduct({ category: '蔬菜', commissionRate: 0, stock: 99 });
     setYesterdayPrice(null);
+    refreshData();
+  };
+
+  const handleAddCategory = () => {
+    if(!newCategoryName.trim() || !stationId) return;
+    store.addStationCategory(stationId, newCategoryName.trim());
+    setStationCategories(prev => [...prev, newCategoryName.trim()]);
+    setNewProduct({...newProduct, category: newCategoryName.trim()});
+    setNewCategoryName('');
+    setIsAddingCategory(false);
+  };
+
+  const handleUpdateProduct = (id: string, updates: Partial<Product>) => {
+    store.updateProduct(id, updates);
     refreshData();
   };
 
@@ -286,6 +311,11 @@ export const ManagerDashboard: React.FC = () => {
     alert('推广链接已复制！请发送到微信群。');
   };
 
+  const filteredProducts = products.filter(p => 
+    p.name.toLowerCase().includes(productSearch.toLowerCase()) || 
+    p.category.toLowerCase().includes(productSearch.toLowerCase())
+  );
+
   if (!station) return <div>Loading...</div>;
 
   return (
@@ -315,7 +345,7 @@ export const ManagerDashboard: React.FC = () => {
         </div>
         
         {/* Tabs */}
-        <div className="flex border-b overflow-x-auto">
+        <div className="flex border-b overflow-x-auto no-scrollbar">
           <button 
             onClick={() => setActiveTab('orders')} 
             className={`flex-1 min-w-[60px] py-3 text-sm font-medium whitespace-nowrap ${activeTab === 'orders' ? 'text-primary border-b-2 border-primary' : 'text-gray-500'}`}
@@ -421,33 +451,60 @@ export const ManagerDashboard: React.FC = () => {
           <div>
             {!isAddingProduct ? (
               <>
-                <button 
-                  onClick={() => setIsAddingProduct(true)}
-                  className="w-full bg-primary text-white py-3 rounded-xl mb-4 flex items-center justify-center gap-2 shadow-md"
-                >
-                  <Plus size={20} /> 发布今日新菜
-                </button>
+                <div className="flex gap-2 mb-4">
+                   <div className="flex-1 relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                      <input 
+                        type="text" 
+                        placeholder="搜索商品或分类..." 
+                        className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                        value={productSearch}
+                        onChange={e => setProductSearch(e.target.value)}
+                      />
+                   </div>
+                   <button 
+                     onClick={() => setIsAddingProduct(true)}
+                     className="bg-primary text-white px-4 rounded-xl flex items-center justify-center gap-1 shadow-md whitespace-nowrap text-sm font-bold"
+                   >
+                     <Plus size={18} /> 上架
+                   </button>
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
-                  {products.map(p => {
-                    // Find original station avatar if consigned
+                  {filteredProducts.map(p => {
                     let originalAvatar = '';
                     if (p.isConsigned && p.originalStationId) {
                       const origStation = store.getStation(p.originalStationId);
                       originalAvatar = origStation?.avatar || '';
                     }
 
+                    // Low Stock Warning
+                    const isLowStock = p.stock < 5 && p.isAvailable;
+
                     return (
-                      <div key={p.id} className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100 relative">
+                      <div key={p.id} className={`bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100 relative ${!p.isAvailable ? 'opacity-70 grayscale' : ''}`}>
                         {p.isConsigned && (
                           <div className="absolute top-2 right-2 bg-orange-500 text-white text-[10px] px-2 py-0.5 rounded-full z-10 shadow-sm flex items-center gap-1">
                              <RefreshCw size={10} /> 代销
                           </div>
                         )}
-                        <div className="h-32 bg-gray-200 relative">
+                        {!p.isAvailable && (
+                           <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
+                              <span className="bg-black/60 text-white px-3 py-1 rounded font-bold backdrop-blur-sm">已下架</span>
+                           </div>
+                        )}
+                        <div className="h-32 bg-gray-200 relative group">
                           <img src={p.image} alt={p.name} className="w-full h-full object-cover" />
                           {originalAvatar && (
                              <img src={originalAvatar} className="w-8 h-8 rounded-full border-2 border-white absolute bottom-2 left-2" alt="Original Station"/>
                           )}
+                          <button 
+                             onClick={() => handleUpdateProduct(p.id, { isAvailable: !p.isAvailable })}
+                             className="absolute top-2 left-2 bg-black/50 text-white p-1.5 rounded-full backdrop-blur-sm opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity"
+                             title={p.isAvailable ? "下架" : "上架"}
+                          >
+                             <Archive size={14} />
+                          </button>
                         </div>
                         <div className="p-3">
                           <h3 className="font-bold">{p.name}</h3>
@@ -457,7 +514,22 @@ export const ManagerDashboard: React.FC = () => {
                                <span className="text-[10px] text-green-600 bg-green-50 px-1 rounded">返佣{p.commissionRate}%</span>
                              ) : null}
                           </div>
-                          <p className="text-xs text-gray-500 truncate mt-1">{p.description}</p>
+                          
+                          <div className="mt-2 pt-2 border-t border-gray-50 flex justify-between items-center">
+                             <div className={`text-xs flex items-center gap-1 ${isLowStock ? 'text-red-500 font-bold' : 'text-gray-500'}`}>
+                                {isLowStock && <AlertTriangle size={12}/>}
+                                库存: 
+                                <input 
+                                  type="number" 
+                                  className={`w-12 ml-1 border rounded px-1 py-0.5 text-center focus:ring-1 focus:ring-primary outline-none ${isLowStock ? 'border-red-200 bg-red-50' : ''}`}
+                                  value={p.stock}
+                                  onChange={(e) => handleUpdateProduct(p.id, { stock: parseInt(e.target.value) || 0 })}
+                                />
+                             </div>
+                             <div className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
+                                {p.category}
+                             </div>
+                          </div>
                         </div>
                       </div>
                     )
@@ -500,7 +572,6 @@ export const ManagerDashboard: React.FC = () => {
                 </div>
 
                 <form onSubmit={handleAddProduct} className="space-y-4">
-                  {/* Image Preview */}
                   {newProduct.image && newProduct.image.startsWith('data:') && (
                      <div className="w-full h-40 rounded-lg overflow-hidden mb-2 bg-gray-100 border relative">
                        <img src={newProduct.image} alt="Preview" className="w-full h-full object-cover" />
@@ -568,6 +639,52 @@ export const ManagerDashboard: React.FC = () => {
                     )}
                   </div>
                   
+                  <div className="grid grid-cols-2 gap-2">
+                     <div>
+                        <label className="text-xs font-bold text-gray-500 mb-1 block">商品分类</label>
+                        {!isAddingCategory ? (
+                          <div className="flex gap-1">
+                             <select 
+                                className="w-full border p-2 rounded-lg text-sm bg-white"
+                                value={newProduct.category || ''}
+                                onChange={e => {
+                                  if(e.target.value === 'add_new') {
+                                    setIsAddingCategory(true);
+                                  } else {
+                                    setNewProduct({...newProduct, category: e.target.value});
+                                  }
+                                }}
+                             >
+                                {stationCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                                <option value="add_new">+ 添加新分类</option>
+                             </select>
+                          </div>
+                        ) : (
+                          <div className="flex gap-1">
+                             <input 
+                               type="text"
+                               className="w-full border p-2 rounded-lg text-sm"
+                               placeholder="输入分类名"
+                               value={newCategoryName}
+                               onChange={e => setNewCategoryName(e.target.value)}
+                               autoFocus
+                             />
+                             <button type="button" onClick={handleAddCategory} className="bg-primary text-white px-2 rounded-lg text-xs">确定</button>
+                             <button type="button" onClick={() => setIsAddingCategory(false)} className="bg-gray-200 text-gray-600 px-2 rounded-lg text-xs">取消</button>
+                          </div>
+                        )}
+                     </div>
+                     <div>
+                        <label className="text-xs font-bold text-gray-500 mb-1 block">库存数量</label>
+                        <input 
+                           type="number"
+                           className="w-full border p-2 rounded-lg"
+                           value={newProduct.stock || ''}
+                           onChange={e => setNewProduct({...newProduct, stock: parseInt(e.target.value)})}
+                        />
+                     </div>
+                  </div>
+
                   <div>
                     <label className="text-xs font-bold text-gray-500 mb-1 block">渠道返佣比例 (%)</label>
                     <input 
@@ -604,8 +721,10 @@ export const ManagerDashboard: React.FC = () => {
           </div>
         )}
 
+        {/* ... Partners, Stats, Settings ... */}
         {activeTab === 'partners' && (
           <div className="space-y-4">
+             {/* ... Partner content unchanged ... */}
              <div 
                onClick={() => partnerQrRef.current?.click()}
                className="bg-white border-2 border-dashed border-primary/50 text-primary rounded-xl p-4 flex flex-col items-center justify-center cursor-pointer active:bg-blue-50 transition-colors"
@@ -630,8 +749,6 @@ export const ManagerDashboard: React.FC = () => {
 
              <div className="space-y-3">
                {partners.map((partner: any) => {
-                  // Simulate logic for "New Products" - simple random or check actual count
-                  // Here we just check if consignmentCount < 5 for demo purpose to show bubble
                   const hasNew = true; 
 
                   return (
@@ -665,8 +782,8 @@ export const ManagerDashboard: React.FC = () => {
              </div>
           </div>
         )}
-
-        {/* Partner Details Modal */}
+        
+        {/* Partner Details Modal ... */}
         {selectedPartner && (
            <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-4 backdrop-blur-sm">
               <div className="bg-white rounded-2xl w-full max-w-md max-h-[80vh] flex flex-col shadow-2xl">
@@ -722,8 +839,10 @@ export const ManagerDashboard: React.FC = () => {
            </div>
         )}
 
+        {/* ... Stats, Settings Tabs ... */}
         {activeTab === 'stats' && stats && (
           <div className="space-y-4">
+             {/* ... Stats unchanged ... */}
             <div className="bg-gradient-to-r from-orange-400 to-red-500 rounded-xl p-6 text-white shadow-lg">
               <p className="text-orange-100 text-sm mb-1">今日销售额</p>
               <h2 className="text-4xl font-bold">¥{stats.todaySales.toFixed(2)}</h2>

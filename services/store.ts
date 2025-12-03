@@ -1,10 +1,14 @@
-import { Station, Product, Order, OrderStatus, ProductSalesRank, CustomerAddress, Location } from '../types';
+
+import { Station, Product, Order, OrderStatus, ProductSalesRank, CustomerAddress, Location, PurchasedItem, CartItem, Recipe, ShoppingListItem } from '../types';
 
 // Keys
 const STATIONS_KEY = 'veggie_stations';
 const PRODUCTS_KEY = 'veggie_products';
 const ORDERS_KEY = 'veggie_orders';
 const ADDRESSES_KEY = 'veggie_customer_addresses';
+const PURCHASED_ITEMS_KEY = 'veggie_purchased_items';
+const FAVORITE_RECIPES_KEY = 'veggie_fav_recipes';
+const SHOPPING_LIST_KEY = 'veggie_shopping_list';
 
 // Helpers
 const get = <T>(key: string): T[] => {
@@ -34,6 +38,68 @@ const set = (key: string, data: any[]) => {
 const MOCK_CENTER_LAT = 39.9042;
 const MOCK_CENTER_LNG = 116.4074;
 
+// Default Categories
+export const DEFAULT_CATEGORIES = ['蔬菜', '水果', '粮油', '肉蛋', '调料', '其它'];
+
+// Shelf Life Map (Days)
+const SHELF_LIFE_DAYS: Record<string, number> = {
+  '蔬菜': 5,
+  '水果': 7,
+  '肉蛋': 10,
+  '粮油': 180,
+  '调料': 365,
+  '其它': 14
+};
+
+// Mock Recipes
+const MOCK_RECIPES: Recipe[] = [
+  {
+    id: 'r1',
+    name: '西红柿炒鸡蛋',
+    description: '国民第一家常菜，酸甜可口，下饭神器。',
+    image: 'https://images.unsplash.com/photo-1599351478170-c7373f7c9e0d?q=80&w=300',
+    ingredients: [{name: '西红柿', amount: '2个'}, {name: '鸡蛋', amount: '3个'}, {name: '葱', amount: '少许'}],
+    steps: ['西红柿切块，鸡蛋打散。', '热锅凉油炒熟鸡蛋盛出。', '锅中倒油炒西红柿出汁。', '加入鸡蛋翻炒均匀，撒葱花出锅。'],
+    tags: ['家常菜', '快手']
+  },
+  {
+    id: 'r2',
+    name: '青椒土豆丝',
+    description: '清脆爽口，酸辣开胃，最简单的美味。',
+    image: 'https://images.unsplash.com/photo-1615485925694-a031e78b4bee?q=80&w=300',
+    ingredients: [{name: '土豆', amount: '1个'}, {name: '青椒', amount: '1个'}, {name: '干辣椒', amount: '3个'}],
+    steps: ['土豆切丝泡水去淀粉。', '青椒切丝。', '油热爆香干辣椒。', '大火快炒土豆丝，加醋，最后放青椒断生。'],
+    tags: ['家常菜', '素食']
+  },
+  {
+    id: 'r3',
+    name: '红烧肉',
+    description: '肥而不腻，入口即化，浓油赤酱。',
+    image: 'https://images.unsplash.com/photo-1546272989-40c92939c6c5?q=80&w=300',
+    ingredients: [{name: '五花肉', amount: '500g'}, {name: '冰糖', amount: '适量'}, {name: '姜', amount: '3片'}, {name: '葱', amount: '2根'}],
+    steps: ['五花肉切块焯水。', '炒糖色，放入肉块翻炒上色。', '加入葱姜、调料和热水炖煮40分钟。', '大火收汁即可。'],
+    tags: ['硬菜', '肉类']
+  },
+  {
+    id: 'r4',
+    name: '蒜蓉西兰花',
+    description: '健康低脂，清淡营养。',
+    image: 'https://images.unsplash.com/photo-1588691880348-7ef06941893f?q=80&w=300',
+    ingredients: [{name: '西兰花', amount: '1颗'}, {name: '蒜', amount: '5瓣'}],
+    steps: ['西兰花洗净切小朵，焯水备用。', '蒜切末。', '热油爆香蒜末。', '倒入西兰花快速翻炒，加盐调味。'],
+    tags: ['减脂', '快手']
+  },
+  {
+    id: 'r5',
+    name: '水果沙拉',
+    description: '缤纷果宴，补充维生素。',
+    image: 'https://images.unsplash.com/photo-1565814636199-6a3f22c34d3b?q=80&w=300',
+    ingredients: [{name: '苹果', amount: '1个'}, {name: '香蕉', amount: '1根'}, {name: '草莓', amount: '5个'}, {name: '酸奶', amount: '1盒'}],
+    steps: ['所有水果洗净切块。', '放入大碗中。', '淋上酸奶拌匀即可。'],
+    tags: ['甜品', '简单']
+  }
+];
+
 export const store = {
   // Station Logic
   createStation: (name: string, owner: string, phone: string, paymentQrCode: string): Station => {
@@ -56,7 +122,8 @@ export const store = {
       location: {
         lat: MOCK_CENTER_LAT + latOffset,
         lng: MOCK_CENTER_LNG + lngOffset
-      }
+      },
+      categories: DEFAULT_CATEGORIES
     };
     stations.push(newStation);
     set(STATIONS_KEY, stations);
@@ -103,6 +170,18 @@ export const store = {
     }
   },
 
+  addStationCategory: (stationId: string, newCategory: string) => {
+    const stations = get<Station>(STATIONS_KEY);
+    const index = stations.findIndex(s => s.id === stationId);
+    if (index !== -1) {
+      const currentCats = stations[index].categories || DEFAULT_CATEGORIES;
+      if (!currentCats.includes(newCategory)) {
+        stations[index].categories = [...currentCats, newCategory];
+        set(STATIONS_KEY, stations);
+      }
+    }
+  },
+
   // Geo Logic
   getNearbyStations: (userLat: number, userLng: number): (Station & { distance: number, productCount: number })[] => {
     const stations = get<Station>(STATIONS_KEY);
@@ -124,7 +203,7 @@ export const store = {
       const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
       const distance = R * c;
 
-      const productCount = products.filter(p => p.stationId === station.id).length;
+      const productCount = products.filter(p => p.stationId === station.id && p.isAvailable !== false).length;
 
       return {
         ...station,
@@ -146,7 +225,6 @@ export const store = {
     if (!currentStation) return { success: false, message: '当前站点不存在' };
 
     // Find station with matching QR code
-    // Note: In a real app, this would be a secure lookup. Here we compare Base64 strings.
     const partner = stations.find(s => s.paymentQrCode === qrCodeData && s.id !== currentStationId);
 
     if (!partner) {
@@ -172,34 +250,51 @@ export const store = {
   // Product Logic
   addProduct: (product: Product) => {
     const products = get<Product>(PRODUCTS_KEY);
+    product.isAvailable = product.isAvailable !== undefined ? product.isAvailable : true;
     products.push(product);
     set(PRODUCTS_KEY, products);
   },
 
+  updateProduct: (productId: string, updates: Partial<Product>) => {
+    const products = get<Product>(PRODUCTS_KEY);
+    const index = products.findIndex(p => p.id === productId);
+    if (index !== -1) {
+      products[index] = { ...products[index], ...updates };
+      set(PRODUCTS_KEY, products);
+    }
+  },
+
   getProducts: (stationId: string): Product[] => {
-    return get<Product>(PRODUCTS_KEY).filter(p => p.stationId === stationId);
+    return get<Product>(PRODUCTS_KEY)
+      .filter(p => p.stationId === stationId)
+      .sort((a, b) => b.id.localeCompare(a.id));
+  },
+
+  findProductByIngredient: (stationId: string, ingredientName: string): Product | undefined => {
+    const products = get<Product>(PRODUCTS_KEY).filter(p => p.stationId === stationId && p.isAvailable !== false);
+    // Simple fuzzy match: check if product name contains ingredient or vice versa
+    return products.find(p => p.name.includes(ingredientName) || ingredientName.includes(p.name));
   },
 
   // Consignment Logic
   consignProduct: (currentStationId: string, product: Product) => {
     const products = get<Product>(PRODUCTS_KEY);
     
-    // Check if already consigned
     const alreadyConsigned = products.some(p => 
       p.stationId === currentStationId && 
       p.originalStationId === product.stationId &&
-      p.name === product.name // Simple check, ideally check against original ID if we stored it
+      p.name === product.name 
     );
 
     if (alreadyConsigned) return;
 
     const newProduct: Product = {
       ...product,
-      id: Date.now().toString(), // New ID for the consigned instance
+      id: Date.now().toString(),
       stationId: currentStationId,
       originalStationId: product.stationId,
       isConsigned: true,
-      // Keep price, image, description, commissionRate from original
+      isAvailable: true
     };
 
     products.push(newProduct);
@@ -219,6 +314,31 @@ export const store = {
     const orders = get<Order>(ORDERS_KEY);
     orders.push(order);
     set(ORDERS_KEY, orders);
+
+    // Side Effect: Add to Purchased Items (Basket)
+    const purchasedItems = get<PurchasedItem>(PURCHASED_ITEMS_KEY);
+    const now = Date.now();
+    
+    order.items.forEach(item => {
+       const shelfLife = SHELF_LIFE_DAYS[item.category] || 7;
+       const expiryDate = now + (shelfLife * 24 * 60 * 60 * 1000);
+       
+       purchasedItems.push({
+         id: `pi_${now}_${Math.random().toString(36).substr(2, 9)}`,
+         productId: item.id,
+         name: item.name,
+         image: item.image,
+         category: item.category,
+         quantity: item.quantity,
+         purchaseDate: now,
+         expiryDate: expiryDate,
+         customerPhone: order.customerPhone,
+         isDeleted: false,
+         isLocked: false,
+         threshold: 5
+       });
+    });
+    set(PURCHASED_ITEMS_KEY, purchasedItems);
   },
 
   getOrders: (stationId: string): Order[] => {
@@ -236,12 +356,111 @@ export const store = {
     }
   },
 
+  // Purchased Items (My Basket) Logic
+  getPurchasedItems: (customerPhone: string): PurchasedItem[] => {
+    return get<PurchasedItem>(PURCHASED_ITEMS_KEY)
+      .filter(item => item.customerPhone === customerPhone);
+  },
+
+  deletePurchasedItem: (itemId: string) => {
+    const items = get<PurchasedItem>(PURCHASED_ITEMS_KEY);
+    const index = items.findIndex(i => i.id === itemId);
+    if (index !== -1) {
+      items[index].isDeleted = true; // Soft delete
+      set(PURCHASED_ITEMS_KEY, items);
+    }
+  },
+
+  updatePurchasedItem: (itemId: string, updates: Partial<PurchasedItem>) => {
+    const items = get<PurchasedItem>(PURCHASED_ITEMS_KEY);
+    const index = items.findIndex(i => i.id === itemId);
+    if (index !== -1) {
+      items[index] = { ...items[index], ...updates };
+      set(PURCHASED_ITEMS_KEY, items);
+    }
+  },
+
+  restockLockedItemsToShoppingList: (userPhone: string): number => {
+    const items = get<PurchasedItem>(PURCHASED_ITEMS_KEY).filter(i => i.customerPhone === userPhone);
+    const data = get<{phone: string, list: ShoppingListItem[]}>(SHOPPING_LIST_KEY);
+    let listIndex = data.findIndex(d => d.phone === userPhone);
+    let currentList = listIndex !== -1 ? data[listIndex].list : [];
+
+    let count = 0;
+    items.forEach(item => {
+      // Check if item is locked AND not deleted AND below threshold
+      if (item.isLocked && !item.isDeleted && item.quantity < (item.threshold || 5)) {
+        // Check if already in shopping list
+        const exists = currentList.find(li => li.name === item.name);
+        if (!exists) {
+          currentList.push({
+            id: Date.now().toString() + count,
+            name: item.name,
+            quantity: (item.threshold || 5) - item.quantity, // Suggest amount to refill to threshold
+            unit: '份' // Default unit
+          });
+          count++;
+        }
+      }
+    });
+
+    if (count > 0) {
+      if (listIndex !== -1) {
+        data[listIndex].list = currentList;
+      } else {
+        data.push({ phone: userPhone, list: currentList });
+      }
+      set(SHOPPING_LIST_KEY, data);
+    }
+
+    return count;
+  },
+
+  // Recipe Logic
+  getRecipes: (): Recipe[] => {
+    return MOCK_RECIPES;
+  },
+
+  getFavoriteRecipeIds: (userPhone: string): string[] => {
+    const favs = get<{phone: string, recipeId: string}>(FAVORITE_RECIPES_KEY);
+    return favs.filter(f => f.phone === userPhone).map(f => f.recipeId);
+  },
+
+  toggleFavoriteRecipe: (userPhone: string, recipeId: string) => {
+    let favs = get<{phone: string, recipeId: string}>(FAVORITE_RECIPES_KEY);
+    const existingIndex = favs.findIndex(f => f.phone === userPhone && f.recipeId === recipeId);
+    
+    if (existingIndex !== -1) {
+      favs.splice(existingIndex, 1); // Remove
+    } else {
+      favs.push({ phone: userPhone, recipeId }); // Add
+    }
+    set(FAVORITE_RECIPES_KEY, favs);
+  },
+
+  // Shopping List Logic
+  getShoppingList: (userPhone: string): ShoppingListItem[] => {
+    const data = get<{phone: string, list: ShoppingListItem[]}>(SHOPPING_LIST_KEY);
+    const entry = data.find(d => d.phone === userPhone);
+    return entry ? entry.list : [];
+  },
+
+  saveShoppingList: (userPhone: string, list: ShoppingListItem[]) => {
+    const data = get<{phone: string, list: ShoppingListItem[]}>(SHOPPING_LIST_KEY);
+    const index = data.findIndex(d => d.phone === userPhone);
+    if (index !== -1) {
+      data[index].list = list;
+    } else {
+      data.push({ phone: userPhone, list });
+    }
+    set(SHOPPING_LIST_KEY, data);
+  },
+
   // Stats
   getStats: (stationId: string) => {
     const orders = get<Order>(ORDERS_KEY).filter(o => o.stationId === stationId);
     const now = new Date();
     
-    // Simple mock logic for Today, Week, Month calculation
     const isSameDay = (d1: Date, d2: Date) => 
       d1.getFullYear() === d2.getFullYear() &&
       d1.getMonth() === d2.getMonth() &&
@@ -250,7 +469,6 @@ export const store = {
     const todayOrders = orders.filter(o => isSameDay(new Date(o.createdAt), now));
     const todaySales = todayOrders.reduce((acc, curr) => acc + curr.total, 0);
 
-    // Mocking historical data for the chart based on random seeds + actual data
     const weeklyData = [
       { name: 'Mon', value: 120 },
       { name: 'Tue', value: 200 },
@@ -261,7 +479,6 @@ export const store = {
       { name: 'Sun', value: todaySales || 100 }, 
     ];
 
-    // Product Ranking Logic
     const productMap = new Map<string, ProductSalesRank>();
     
     orders.forEach(order => {
@@ -279,7 +496,7 @@ export const store = {
     });
 
     const topProducts = Array.from(productMap.values())
-      .sort((a, b) => b.totalSold - a.totalSold); // Sort by quantity sold DESC
+      .sort((a, b) => b.totalSold - a.totalSold);
 
     return {
       todaySales,
@@ -296,7 +513,6 @@ export const store = {
 
   addCustomerAddress: (addressText: string, contactName: string, phone: string) => {
     const addresses = get<CustomerAddress>(ADDRESSES_KEY);
-    // If it's the first address, make it default automatically
     const isFirst = addresses.length === 0;
     const newAddress: CustomerAddress = {
       id: Date.now().toString(),
@@ -313,7 +529,6 @@ export const store = {
   deleteCustomerAddress: (id: string) => {
     let addresses = get<CustomerAddress>(ADDRESSES_KEY);
     addresses = addresses.filter(a => a.id !== id);
-    // If we deleted the default, make the first one default
     if (addresses.length > 0 && !addresses.some(a => a.isDefault)) {
       addresses[0].isDefault = true;
     }

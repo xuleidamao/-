@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 
 const apiKey = process.env.API_KEY || ''; 
@@ -80,6 +81,62 @@ export const identifyProductFromImage = async (base64Image: string): Promise<AIP
     return null;
   } catch (error) {
     console.error("Gemini vision error:", error);
+    return null;
+  }
+};
+
+export interface AIRecipeResult {
+  name: string;
+  description: string;
+  ingredients: { name: string; amount: string }[];
+  steps: string[];
+}
+
+export const generateRecipe = async (query: string): Promise<AIRecipeResult[] | null> => {
+  if (!ai) return null;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: `Suggest 3 Chinese home-style recipes based on the keyword or ingredients: "${query}". 
+      Return a JSON array where each object has:
+      'name' (recipe name),
+      'description' (very short appetizing summary),
+      'ingredients' (array of objects with 'name' and 'amount'),
+      'steps' (array of strings).`,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              name: { type: Type.STRING },
+              description: { type: Type.STRING },
+              ingredients: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    name: { type: Type.STRING },
+                    amount: { type: Type.STRING }
+                  }
+                }
+              },
+              steps: { type: Type.ARRAY, items: { type: Type.STRING } }
+            }
+          }
+        }
+      }
+    });
+
+    if (response.text) {
+      return JSON.parse(response.text) as AIRecipeResult[];
+    }
+    return null;
+
+  } catch (error) {
+    console.error("Gemini recipe error:", error);
     return null;
   }
 };
