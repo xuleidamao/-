@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
-import { ShoppingBag, Plus, Minus, Clock, MapPin, CheckCircle, X, Store, ChevronLeft, Trash2, User, LogOut, CheckCircle as CheckCircleIcon, LinkIcon, RefreshCw, Search, Layers, LayoutGrid, Refrigerator, History, AlertTriangle, Calendar, Trash, BookOpen, Heart, ChefHat, ListPlus, Sparkles, ClipboardList, Lock, Unlock, Bell, BellRing, Edit } from '../components/ui/Icons';
+import { ShoppingBag, Plus, Minus, Clock, MapPin, CheckCircle, X, Store, ChevronLeft, Trash2, User, LogOut, CheckCircle as CheckCircleIcon, LinkIcon, RefreshCw, Search, Layers, LayoutGrid, Refrigerator, History, AlertTriangle, Calendar, Trash, BookOpen, Heart, ChefHat, ListPlus, Sparkles, ClipboardList, Lock, Unlock, Bell, BellRing, Edit, Star } from '../components/ui/Icons';
 import { store, DEFAULT_CATEGORIES } from '../services/store';
 import { generateRecipe } from '../services/geminiService';
 import { Station, Product, CartItem, Order, OrderStatus, CustomerAddress, PurchasedItem, Recipe, ShoppingListItem } from '../types';
@@ -23,6 +23,12 @@ export const CustomerShop: React.FC = () => {
   const [showCheckout, setShowCheckout] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   
+  // Station Favorites State
+  const [isStationFavorite, setIsStationFavorite] = useState(false);
+  const [showStationList, setShowStationList] = useState(false);
+  const [stationListData, setStationListData] = useState<(Station & { distance: number, productCount: number, orderCount: number })[]>([]);
+  const [stationListSort, setStationListSort] = useState<'distance' | 'orders' | 'products'>('distance');
+
   // Shopping List State
   const [showShoppingList, setShowShoppingList] = useState(false);
   const [shoppingList, setShoppingList] = useState<ShoppingListItem[]>([]);
@@ -88,15 +94,27 @@ export const CustomerShop: React.FC = () => {
     }
   }, [showSettings, showCheckout]);
 
-  // Load purchased items & favorites whenever phone changes or tab switches
+  // Load purchased items, favorites, and check station favorite status
   useEffect(() => {
     if (currentUserPhone) {
       setPurchasedItems(store.getPurchasedItems(currentUserPhone));
       setFavoriteRecipeIds(store.getFavoriteRecipeIds(currentUserPhone));
       setShoppingList(store.getShoppingList(currentUserPhone));
+      if (stationId) {
+        setIsStationFavorite(store.isStationFavorite(currentUserPhone, stationId));
+      }
     }
     setRecipes(store.getRecipes());
-  }, [currentUserPhone, activeTab, orderPlaced]);
+  }, [currentUserPhone, activeTab, orderPlaced, stationId]);
+
+  // Load Station List when modal opens
+  useEffect(() => {
+    if (showStationList && currentUserPhone) {
+       const userLoc = store.getMockCenter(); // Should ideally get real location
+       const list = store.getFavoriteStationsWithStats(currentUserPhone, userLoc.lat, userLoc.lng);
+       setStationListData(list);
+    }
+  }, [showStationList, currentUserPhone]);
 
   // Auto-fill default address when opening checkout
   useEffect(() => {
@@ -168,6 +186,19 @@ export const CustomerShop: React.FC = () => {
     setShowCheckout(false);
     setShowCart(false);
     setCurrentUserPhone(customerPhone); // Update current user context
+  };
+
+  // Station Favorite Handler
+  const handleToggleStationFavorite = () => {
+    if (!currentUserPhone) {
+      alert("请先设置个人信息以便收藏小站");
+      setShowSettings(true);
+      return;
+    }
+    if (!stationId) return;
+
+    store.toggleFavoriteStation(currentUserPhone, stationId);
+    setIsStationFavorite(prev => !prev);
   };
 
   // Address Handlers
@@ -348,6 +379,16 @@ export const CustomerShop: React.FC = () => {
       }
   });
 
+  // Station List Sorting
+  const sortedStationList = useMemo(() => {
+     return [...stationListData].sort((a, b) => {
+        if (stationListSort === 'distance') return a.distance - b.distance;
+        if (stationListSort === 'orders') return b.orderCount - a.orderCount;
+        if (stationListSort === 'products') return b.productCount - a.productCount;
+        return 0;
+     });
+  }, [stationListData, stationListSort]);
+
   // Recipe Logic
   const toggleRecipeFavorite = (recipe: Recipe, e: React.MouseEvent) => {
      e.stopPropagation();
@@ -423,23 +464,39 @@ export const CustomerShop: React.FC = () => {
       return 0;
   });
 
-  const addMissingToCart = (ingredients: {name: string, amount: string}[]) => {
-     if (!stationId) return;
+  const addMissingToShoppingList = (ingredients: {name: string, amount: string}[]) => {
+     if (!currentUserPhone) {
+        alert("请先设置个人信息以便保存清单");
+        setShowSettings(true);
+        return;
+     }
+
+     const currentList = [...shoppingList];
      let addedCount = 0;
+
      ingredients.forEach(ing => {
-        const product = store.findProductByIngredient(stationId, ing.name);
-        if (product) {
-           addToCart(product);
+        // Deduplication: Check if name already exists in current list
+        const exists = currentList.find(item => item.name === ing.name);
+        
+        if (!exists) {
+           currentList.push({
+             id: Date.now().toString() + Math.random().toString().substr(2, 5),
+             name: ing.name,
+             quantity: 1, // Default quantity
+             unit: '份'   // Default unit
+           });
            addedCount++;
         }
      });
      
      if (addedCount > 0) {
-        alert(`已成功将 ${addedCount} 种缺失食材加入购物车！`);
-        setShowCart(true);
+        setShoppingList(currentList);
+        store.saveShoppingList(currentUserPhone, currentList);
+        alert(`已将 ${addedCount} 种食材加入采购清单！`);
+        setShowShoppingList(true);
         setSelectedRecipe(null); // Close modal
      } else {
-        alert("未在小站找到匹配的商品，请尝试搜索其他替代品。");
+        alert("这些食材已在您的采购清单中，无需重复添加。");
      }
   };
 
@@ -483,9 +540,26 @@ export const CustomerShop: React.FC = () => {
                         <ChevronLeft size={14} /> 退出预览
                         </button>
                     )}
+                    
+                    {/* New Header Buttons */}
+                    <button 
+                        onClick={handleToggleStationFavorite}
+                        className={`p-2 rounded-full backdrop-blur-sm border border-white/30 transition-all ${isStationFavorite ? 'bg-red-500/80 text-white border-red-400' : 'bg-white/20 hover:bg-white/30 text-white'}`}
+                        title={isStationFavorite ? "已收藏" : "收藏小站"}
+                    >
+                        <Heart size={18} className={isStationFavorite ? "fill-current" : ""}/>
+                    </button>
+                    <button 
+                        onClick={() => setShowStationList(true)}
+                        className="bg-white/20 hover:bg-white/30 text-white p-2 rounded-full backdrop-blur-sm border border-white/30 transition-all"
+                        title="我的小站清单"
+                    >
+                        <Store size={18} />
+                    </button>
                     <button 
                         onClick={() => setShowSettings(true)}
                         className="bg-white/20 hover:bg-white/30 text-white p-2 rounded-full backdrop-blur-sm border border-white/30 transition-all"
+                        title="个人中心"
                     >
                         <User size={18} />
                     </button>
@@ -650,6 +724,82 @@ export const CustomerShop: React.FC = () => {
                 </div>
             )}
         </>
+      )}
+
+      {/* Station List Modal */}
+      {showStationList && (
+         <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col animate-in slide-in-from-right">
+            <div className="bg-white p-4 shadow-sm flex items-center justify-between sticky top-0 z-10">
+               <button onClick={() => setShowStationList(false)} className="bg-gray-100 p-2 rounded-full">
+                  <ChevronLeft size={20}/>
+               </button>
+               <h2 className="text-lg font-bold flex items-center gap-2">
+                  <Store className="text-primary"/> 收藏的小站
+               </h2>
+               <div className="w-9"></div>
+            </div>
+
+            <div className="p-4 bg-white border-b border-gray-100 flex gap-2 overflow-x-auto no-scrollbar">
+               <button 
+                  onClick={() => setStationListSort('distance')}
+                  className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap border transition-all ${stationListSort === 'distance' ? 'bg-primary text-white border-primary' : 'bg-gray-50 border-gray-200 text-gray-600'}`}
+               >
+                  距离最近
+               </button>
+               <button 
+                  onClick={() => setStationListSort('orders')}
+                  className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap border transition-all ${stationListSort === 'orders' ? 'bg-primary text-white border-primary' : 'bg-gray-50 border-gray-200 text-gray-600'}`}
+               >
+                  购买最多
+               </button>
+               <button 
+                  onClick={() => setStationListSort('products')}
+                  className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap border transition-all ${stationListSort === 'products' ? 'bg-primary text-white border-primary' : 'bg-gray-50 border-gray-200 text-gray-600'}`}
+               >
+                  菜品最全
+               </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+               {stationListData.length === 0 && (
+                  <div className="text-center py-20 text-gray-400">
+                     <Store size={48} className="mx-auto mb-2 opacity-20"/>
+                     <p>还没有收藏的小站</p>
+                     <p className="text-xs mt-1">点击小站首页右上角的爱心即可收藏</p>
+                  </div>
+               )}
+
+               {sortedStationList.map(s => (
+                  <div 
+                     key={s.id}
+                     onClick={() => {
+                        navigate(`/shop/${s.id}`);
+                        setShowStationList(false);
+                     }}
+                     className={`bg-white rounded-xl shadow-sm border p-4 flex gap-4 active:scale-[0.98] transition-all cursor-pointer ${s.id === stationId ? 'border-primary ring-1 ring-primary/20' : 'border-gray-100'}`}
+                  >
+                     <img src={s.avatar} className="w-16 h-16 rounded-lg object-cover bg-gray-100" alt={s.stationName}/>
+                     <div className="flex-1">
+                        <div className="flex justify-between items-start mb-1">
+                           <h3 className="font-bold text-gray-900">{s.stationName}</h3>
+                           <span className="text-xs font-bold text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded">
+                              {s.distance < 1 ? `${(s.distance * 1000).toFixed(0)}m` : `${s.distance.toFixed(1)}km`}
+                           </span>
+                        </div>
+                        <p className="text-xs text-gray-500 mb-2">站长: {s.ownerName}</p>
+                        <div className="flex gap-2 text-xs">
+                           <span className="bg-orange-50 text-orange-600 px-2 py-0.5 rounded flex items-center gap-1">
+                              <ShoppingBag size={10}/> 买了{s.orderCount}次
+                           </span>
+                           <span className="bg-green-50 text-green-600 px-2 py-0.5 rounded flex items-center gap-1">
+                              <Layers size={10}/> {s.productCount}款菜
+                           </span>
+                        </div>
+                     </div>
+                  </div>
+               ))}
+            </div>
+         </div>
       )}
 
       {/* Shopping List Modal */}
@@ -1087,10 +1237,10 @@ export const CustomerShop: React.FC = () => {
                     </div>
                     {(selectedRecipe as any).missingIngredients?.length > 0 && (
                        <button 
-                          onClick={() => addMissingToCart((selectedRecipe as any).missingIngredients)}
+                          onClick={() => addMissingToShoppingList((selectedRecipe as any).missingIngredients)}
                           className="w-full mt-3 bg-primary/10 text-primary py-2 rounded-lg font-bold text-sm hover:bg-primary/20 transition-colors flex items-center justify-center gap-2"
                        >
-                          <ListPlus size={16}/> 一键添加缺失食材
+                          <ListPlus size={16}/> 加入采购清单
                        </button>
                     )}
                  </div>

@@ -48,7 +48,8 @@ import {
   Lock,
   Unlock,
   Bell,
-  BellRing
+  BellRing,
+  Star
 } from 'lucide-react';
 
 export {
@@ -100,5 +101,6 @@ export {
   Lock,
   Unlock,
   Bell,
-  BellRing
+  BellRing,
+  Star
 };

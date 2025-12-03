@@ -9,6 +9,7 @@ const ADDRESSES_KEY = 'veggie_customer_addresses';
 const PURCHASED_ITEMS_KEY = 'veggie_purchased_items';
 const FAVORITE_RECIPES_KEY = 'veggie_fav_recipes';
 const SHOPPING_LIST_KEY = 'veggie_shopping_list';
+const FAVORITE_STATIONS_KEY = 'veggie_fav_stations';
 
 // Helpers
 const get = <T>(key: string): T[] => {
@@ -216,6 +217,59 @@ export const store = {
   
   // Expose mock center for the UI to use as default user location
   getMockCenter: () => ({ lat: MOCK_CENTER_LAT, lng: MOCK_CENTER_LNG }),
+
+  // Favorite Stations Logic
+  toggleFavoriteStation: (userPhone: string, stationId: string) => {
+    let favs = get<{phone: string, stationId: string}>(FAVORITE_STATIONS_KEY);
+    const index = favs.findIndex(f => f.phone === userPhone && f.stationId === stationId);
+    if (index !== -1) {
+      favs.splice(index, 1);
+    } else {
+      favs.push({ phone: userPhone, stationId });
+    }
+    set(FAVORITE_STATIONS_KEY, favs);
+  },
+
+  isStationFavorite: (userPhone: string, stationId: string): boolean => {
+    const favs = get<{phone: string, stationId: string}>(FAVORITE_STATIONS_KEY);
+    return favs.some(f => f.phone === userPhone && f.stationId === stationId);
+  },
+
+  getFavoriteStationsWithStats: (userPhone: string, userLat: number, userLng: number) => {
+    const favs = get<{phone: string, stationId: string}>(FAVORITE_STATIONS_KEY).filter(f => f.phone === userPhone);
+    const allStations = get<Station>(STATIONS_KEY);
+    const products = get<Product>(PRODUCTS_KEY);
+    const orders = get<Order>(ORDERS_KEY).filter(o => o.customerPhone === userPhone);
+
+    return favs.map(f => {
+      const station = allStations.find(s => s.id === f.stationId);
+      if (!station) return null;
+
+      // Distance Calc
+      const sLat = station.location?.lat || MOCK_CENTER_LAT;
+      const sLng = station.location?.lng || MOCK_CENTER_LNG;
+      const R = 6371; 
+      const dLat = (sLat - userLat) * Math.PI / 180;
+      const dLng = (sLng - userLng) * Math.PI / 180;
+      const a = 
+        Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(userLat * Math.PI / 180) * Math.cos(sLat * Math.PI / 180) * 
+        Math.sin(dLng/2) * Math.sin(dLng/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+      const distance = R * c;
+
+      // Stats
+      const stationProducts = products.filter(p => p.stationId === station.id && p.isAvailable !== false);
+      const stationOrders = orders.filter(o => o.stationId === station.id);
+
+      return {
+        ...station,
+        distance,
+        productCount: stationProducts.length,
+        orderCount: stationOrders.length
+      };
+    }).filter((s): s is (Station & { distance: number, productCount: number, orderCount: number }) => s !== null);
+  },
 
   // Partner Logic
   addPartnerByQr: (currentStationId: string, qrCodeData: string): { success: boolean, message: string } => {
