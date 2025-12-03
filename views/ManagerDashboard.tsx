@@ -274,7 +274,9 @@ export const ManagerDashboard: React.FC = () => {
      }
   };
 
-  const handleLogout = () => {
+  const handleLogout = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     if(window.confirm("确定要退出管理端返回首页吗？")) {
       navigate('/');
     }

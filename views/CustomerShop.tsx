@@ -224,7 +224,9 @@ export const CustomerShop: React.FC = () => {
     setSavedAddresses(store.getCustomerAddresses());
   };
 
-  const handleLogout = () => {
+  const handleLogout = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     if(window.confirm("确定要退出返回首页吗？")) {
       navigate('/');
     }
@@ -1526,6 +1528,7 @@ export const CustomerShop: React.FC = () => {
                      <Store size={18}/> 我要当站长
                   </Link>
                   <button 
+                     type="button"
                      onClick={handleLogout}
                      className="w-full bg-gray-100 text-gray-600 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-red-50 hover:text-red-500 transition-colors"
                   >
