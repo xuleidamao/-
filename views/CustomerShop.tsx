@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { ShoppingBag, Plus, Minus, Clock, MapPin, CheckCircle, X, Store, ChevronLeft, Trash2, User, LogOut, CheckCircle as CheckCircleIcon, LinkIcon, RefreshCw, Search, Layers, LayoutGrid, Refrigerator, History, AlertTriangle, Calendar, Trash, BookOpen, Heart, ChefHat, ListPlus, Sparkles, ClipboardList, Lock, Unlock, Bell, BellRing, Edit } from '../components/ui/Icons';
 import { store, DEFAULT_CATEGORIES } from '../services/store';
@@ -205,15 +205,26 @@ export const CustomerShop: React.FC = () => {
     setCustomerPhone(addr.phone || '');
   };
 
-  const handleDeletePurchasedItem = (itemId: string) => {
-     if(window.confirm("确定要删除这个商品吗？")) {
-        store.deletePurchasedItem(itemId);
-        setPurchasedItems(store.getPurchasedItems(currentUserPhone));
+  const handleDeletePurchasedItem = (item: PurchasedItem, e: React.MouseEvent) => {
+     e.stopPropagation();
+     // If locked, only clear quantity to 0 (Pre-order behavior).
+     // If unlocked, fully delete item.
+     if (item.isLocked) {
+        if(window.confirm("该商品已锁定（预购清单）。\n确定要将数量清零吗？\n(清零后仍保留在列表中以便补货)")) {
+           store.updatePurchasedItem(item.id, { quantity: 0 });
+           setPurchasedItems(store.getPurchasedItems(currentUserPhone));
+        }
+     } else {
+        if(window.confirm("确定要移除该商品吗？")) {
+           store.deletePurchasedItem(item.id);
+           setPurchasedItems(store.getPurchasedItems(currentUserPhone));
+        }
      }
   };
 
   // Lock and Threshold Logic
-  const handleToggleLock = (item: PurchasedItem) => {
+  const handleToggleLock = (item: PurchasedItem, e: React.MouseEvent) => {
+    e.stopPropagation();
     const newLockStatus = !item.isLocked;
     store.updatePurchasedItem(item.id, { isLocked: newLockStatus });
     setPurchasedItems(store.getPurchasedItems(currentUserPhone));
@@ -229,10 +240,10 @@ export const CustomerShop: React.FC = () => {
     if (!currentUserPhone) return;
     const addedCount = store.restockLockedItemsToShoppingList(currentUserPhone);
     if (addedCount > 0) {
-      alert(`已将 ${addedCount} 款库存预警的菜品加入购买清单！`);
+      alert(`已将 ${addedCount} 款库存低于预购值的菜品加入购买清单！`);
       setShoppingList(store.getShoppingList(currentUserPhone)); // Refresh list
     } else {
-      alert("暂时没有低于预警值的锁定菜品。");
+      alert("暂时没有低于预购值的锁定菜品。");
     }
   };
 
@@ -293,7 +304,19 @@ export const CustomerShop: React.FC = () => {
   };
 
   // Filter Logic
+  // Shop Categories
   const categories = ['全部', ...stationCategories];
+  
+  // Dynamic Basket Categories (Based on actual items)
+  const basketCategories = useMemo(() => {
+      const currentItems = showHistory ? purchasedItems : purchasedItems.filter(i => !i.isDeleted);
+      const uniqueCats = new Set<string>();
+      currentItems.forEach(i => {
+         if (i.category && i.category !== '全部') uniqueCats.add(i.category);
+         else if (!i.category) uniqueCats.add('其它');
+      });
+      return ['全部', ...Array.from(uniqueCats).sort()];
+  }, [purchasedItems, showHistory]);
   
   const filteredProducts = products.filter(p => {
      if (p.isAvailable === false) return false;
@@ -313,7 +336,7 @@ export const CustomerShop: React.FC = () => {
 
   const filteredBasketItems = purchasedItems.filter(item => {
       if (!showHistory && item.isDeleted) return false;
-      const status = getExpiryStatus(item.expiryDate);
+      const status = item.quantity === 0 ? 'empty' : getExpiryStatus(item.expiryDate);
       if (showExpiredOnly && status !== 'expired') return false;
       if (basketFilterCat !== '全部' && item.category !== basketFilterCat) return false;
       return true;
@@ -379,10 +402,9 @@ export const CustomerShop: React.FC = () => {
 
       recipe.ingredients.forEach(ing => {
          // Fuzzy match: check if any basket item name includes ingredient name
-         // Note: we check 'purchasedItems' which includes history, or current basket?
          // Let's use current basket items (!isDeleted)
          const hasItem = purchasedItems.some(pi => 
-            !pi.isDeleted && (pi.name.includes(ing.name) || ing.name.includes(pi.name))
+            !pi.isDeleted && pi.quantity > 0 && (pi.name.includes(ing.name) || ing.name.includes(pi.name))
          );
          if (hasItem) {
             matchCount++;
@@ -718,7 +740,7 @@ export const CustomerShop: React.FC = () => {
 
             <div className="space-y-3 mb-6">
                <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-                   {['全部', ...categories].map(c => (
+                   {basketCategories.map(c => (
                        <button
                           key={c}
                           onClick={() => setBasketFilterCat(c)}
@@ -763,7 +785,7 @@ export const CustomerShop: React.FC = () => {
                  onClick={handleBatchReplenish}
                  className="w-full bg-blue-50 text-blue-600 py-3 rounded-xl font-bold flex items-center justify-center gap-2 border border-blue-100 active:bg-blue-100 transition-colors shadow-sm"
               >
-                 <RefreshCw size={18} /> 一键补货（低于预警值）
+                 <RefreshCw size={18} /> 一键补货（低于预购值）
               </button>
             </div>
             
@@ -782,20 +804,21 @@ export const CustomerShop: React.FC = () => {
 
             <div className="space-y-3">
                {filteredBasketItems.map(item => {
-                  const status = getExpiryStatus(item.expiryDate);
+                  const status = item.quantity === 0 ? 'empty' : getExpiryStatus(item.expiryDate);
                   const isDeleted = item.isDeleted;
                   const threshold = item.threshold || 5;
                   const isLowStock = !isDeleted && item.quantity < threshold;
+                  const isLocked = item.isLocked || false;
 
                   return (
                      <div key={item.id} className={`bg-white p-3 rounded-xl shadow-sm border flex gap-3 relative overflow-visible ${isDeleted ? 'opacity-50 grayscale' : ''}`}>
                         <div className={`absolute left-0 top-0 bottom-0 w-1.5 rounded-l-xl
-                           ${status === 'expired' ? 'bg-red-500' : status === 'warning' ? 'bg-yellow-400' : 'bg-green-500'}`}
+                           ${status === 'expired' ? 'bg-red-500' : status === 'warning' ? 'bg-yellow-400' : status === 'empty' ? 'bg-gray-300' : 'bg-green-500'}`}
                         ></div>
                         
                         <div className="relative w-20 h-20 shrink-0">
                           <img src={item.image} className="w-full h-full rounded-lg object-cover bg-gray-100 ml-2" alt={item.name}/>
-                          {isLowStock && item.isLocked && (
+                          {isLowStock && isLocked && (
                              <div className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full border-2 border-white shadow-md z-10">
                                 <BellRing size={12} className="fill-current"/>
                              </div>
@@ -808,29 +831,33 @@ export const CustomerShop: React.FC = () => {
                               <div className="flex gap-1">
                                 {status === 'expired' && <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-bold">已过期</span>}
                                 {status === 'warning' && <span className="text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded font-bold">临期</span>}
+                                {item.quantity === 0 && <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded font-bold">已耗尽</span>}
                               </div>
                            </div>
                            <div className="text-xs text-gray-500 space-y-1">
                               <p className="flex items-center gap-1">
                                  <Calendar size={12}/> 购买: {new Date(item.purchaseDate).toLocaleDateString()}
                               </p>
-                              <p className={`flex items-center gap-1 font-medium ${status === 'expired' ? 'text-red-500' : status === 'warning' ? 'text-yellow-600' : 'text-green-600'}`}>
-                                 <AlertTriangle size={12}/> 到期: {new Date(item.expiryDate).toLocaleDateString()}
-                              </p>
+                              {item.quantity > 0 && (
+                                <p className={`flex items-center gap-1 font-medium ${status === 'expired' ? 'text-red-500' : status === 'warning' ? 'text-yellow-600' : 'text-green-600'}`}>
+                                   <AlertTriangle size={12}/> 到期: {new Date(item.expiryDate).toLocaleDateString()}
+                                </p>
+                              )}
                               
                               <div className="flex items-center gap-2 mt-1">
-                                 <p className={`font-bold ${isLowStock && item.isLocked ? 'text-red-500' : 'text-gray-700'}`}>
-                                   数量: {item.quantity}
+                                 <p className={`font-bold ${isLowStock && isLocked ? 'text-red-500' : 'text-gray-700'}`}>
+                                   {item.quantity === 0 ? "已用完" : `数量: ${item.quantity}`}
                                  </p>
-                                 {item.isLocked && (
+                                 {isLocked && (
                                     <div className="flex items-center gap-1 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100">
-                                       <span className="text-[10px] text-gray-400">预警值:</span>
+                                       <span className="text-[10px] text-gray-400">预购值:</span>
                                        {editingThresholdId === item.id ? (
                                          <input 
                                            autoFocus
                                            type="number" 
                                            className="w-8 h-4 text-center border rounded text-[10px] outline-none focus:ring-1 focus:ring-blue-500"
                                            defaultValue={threshold}
+                                           onClick={(e) => e.stopPropagation()}
                                            onBlur={(e) => handleUpdateThreshold(item, parseInt(e.target.value) || 0)}
                                            onKeyDown={(e) => {
                                              if (e.key === 'Enter') handleUpdateThreshold(item, parseInt((e.target as HTMLInputElement).value) || 0);
@@ -839,7 +866,7 @@ export const CustomerShop: React.FC = () => {
                                        ) : (
                                          <span 
                                            className="font-medium text-[10px] text-blue-600 cursor-pointer border-b border-dashed border-blue-300"
-                                           onClick={() => setEditingThresholdId(item.id)}
+                                           onClick={(e) => { e.stopPropagation(); setEditingThresholdId(item.id); }}
                                          >
                                             {threshold}
                                          </span>
@@ -853,14 +880,15 @@ export const CustomerShop: React.FC = () => {
                         {!isDeleted && (
                            <div className="flex flex-col justify-between items-end pl-2">
                               <button 
-                                onClick={() => handleToggleLock(item)}
-                                className={`p-1.5 rounded-lg transition-colors ${item.isLocked ? 'text-blue-500 bg-blue-50' : 'text-gray-300 hover:bg-gray-50'}`}
+                                onClick={(e) => handleToggleLock(item, e)}
+                                className={`p-1.5 rounded-lg transition-colors ${isLocked ? 'text-blue-500 bg-blue-50' : 'text-gray-300 hover:bg-gray-50'}`}
+                                title={isLocked ? "点击解锁 (非锁定状态下可删除)" : "点击锁定 (锁定后删除只清空数量)"}
                               >
-                                 {item.isLocked ? <Lock size={16}/> : <Unlock size={16}/>}
+                                 {isLocked ? <Lock size={16}/> : <Unlock size={16}/>}
                               </button>
                               
                               <button 
-                                onClick={() => handleDeletePurchasedItem(item.id)} 
+                                onClick={(e) => handleDeletePurchasedItem(item, e)} 
                                 className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                               >
                                  <Trash size={16}/>

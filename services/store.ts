@@ -323,20 +323,53 @@ export const store = {
        const shelfLife = SHELF_LIFE_DAYS[item.category] || 7;
        const expiryDate = now + (shelfLife * 24 * 60 * 60 * 1000);
        
-       purchasedItems.push({
-         id: `pi_${now}_${Math.random().toString(36).substr(2, 9)}`,
-         productId: item.id,
-         name: item.name,
-         image: item.image,
-         category: item.category,
-         quantity: item.quantity,
-         purchaseDate: now,
-         expiryDate: expiryDate,
-         customerPhone: order.customerPhone,
-         isDeleted: false,
-         isLocked: false,
-         threshold: 5
-       });
+       // Deduplication: Find ALL existing indices for this product (by ID and Phone)
+       // This ensures we merge into one record per product type
+       const existingIndices = purchasedItems
+         .map((p, index) => (p.productId === item.id && p.customerPhone === order.customerPhone) ? index : -1)
+         .filter(i => i !== -1);
+
+       if (existingIndices.length > 0) {
+          // Update the first found record
+          const targetIndex = existingIndices[0];
+          const existing = purchasedItems[targetIndex];
+          
+          if (existing.isDeleted) {
+            existing.quantity = item.quantity; // Reset if it was 'deleted'
+          } else {
+            existing.quantity += item.quantity;
+          }
+          
+          existing.name = item.name;
+          existing.image = item.image;
+          existing.purchaseDate = now;
+          existing.expiryDate = expiryDate;
+          existing.isDeleted = false; // Resurrect
+          
+          purchasedItems[targetIndex] = existing;
+
+          // Merge: Remove any extra duplicate records if they exist (cleanup legacy dupes)
+          // Iterate backwards to safely remove
+          for (let i = existingIndices.length - 1; i > 0; i--) {
+             purchasedItems.splice(existingIndices[i], 1);
+          }
+       } else {
+          // Create New
+          purchasedItems.push({
+            id: `pi_${now}_${Math.random().toString(36).substr(2, 9)}`,
+            productId: item.id,
+            name: item.name,
+            image: item.image,
+            category: item.category,
+            quantity: item.quantity,
+            purchaseDate: now,
+            expiryDate: expiryDate,
+            customerPhone: order.customerPhone,
+            isDeleted: false,
+            isLocked: false,
+            threshold: 5 // Default Pre-order Value (预购值)
+          });
+       }
     });
     set(PURCHASED_ITEMS_KEY, purchasedItems);
   },
@@ -388,7 +421,7 @@ export const store = {
 
     let count = 0;
     items.forEach(item => {
-      // Check if item is locked AND not deleted AND below threshold
+      // Check if item is locked AND not deleted AND below pre-order value
       if (item.isLocked && !item.isDeleted && item.quantity < (item.threshold || 5)) {
         // Check if already in shopping list
         const exists = currentList.find(li => li.name === item.name);
@@ -396,7 +429,7 @@ export const store = {
           currentList.push({
             id: Date.now().toString() + count,
             name: item.name,
-            quantity: (item.threshold || 5) - item.quantity, // Suggest amount to refill to threshold
+            quantity: (item.threshold || 5) - item.quantity, // Suggest amount to refill to Pre-order Value
             unit: '份' // Default unit
           });
           count++;
