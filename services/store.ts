@@ -384,26 +384,37 @@ export const store = {
          .filter(i => i !== -1);
 
        if (existingIndices.length > 0) {
-          // Update the first found record
+          // Merge Logic: Sum quantity of non-deleted duplicates to ensure accurate count
           const targetIndex = existingIndices[0];
-          const existing = purchasedItems[targetIndex];
+          let mergedQuantity = 0;
+          let mergedThreshold = 5;
+          let mergedIsLocked = false;
           
-          if (existing.isDeleted) {
-            existing.quantity = item.quantity; // Reset if it was 'deleted'
-          } else {
-            existing.quantity += item.quantity;
-          }
-          
-          existing.name = item.name;
-          existing.image = item.image;
-          existing.purchaseDate = now;
-          existing.expiryDate = expiryDate;
-          existing.isDeleted = false; // Resurrect
-          
-          purchasedItems[targetIndex] = existing;
+          existingIndices.forEach(idx => {
+             const p = purchasedItems[idx];
+             if (!p.isDeleted) {
+                mergedQuantity += p.quantity;
+             }
+             if (p.isLocked) mergedIsLocked = true;
+             if (p.threshold && p.threshold !== 5) mergedThreshold = p.threshold;
+          });
 
-          // Merge: Remove any extra duplicate records if they exist (cleanup legacy dupes)
-          // Iterate backwards to safely remove
+          const targetItem = purchasedItems[targetIndex];
+          
+          // Update the item
+          targetItem.quantity = mergedQuantity + item.quantity;
+          targetItem.isDeleted = false; // Resurrect
+          targetItem.isLocked = mergedIsLocked;
+          targetItem.threshold = mergedThreshold;
+          
+          targetItem.name = item.name;
+          targetItem.image = item.image;
+          targetItem.purchaseDate = now;
+          targetItem.expiryDate = expiryDate;
+          
+          purchasedItems[targetIndex] = targetItem;
+
+          // Remove other duplicates to enforce single record
           for (let i = existingIndices.length - 1; i > 0; i--) {
              purchasedItems.splice(existingIndices[i], 1);
           }

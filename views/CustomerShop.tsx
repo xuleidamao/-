@@ -245,6 +245,7 @@ export const CustomerShop: React.FC = () => {
      if (item.isLocked) {
         if(window.confirm("该商品已锁定（预购清单）。\n确定要将数量清零吗？\n(清零后仍保留在列表中以便补货)")) {
            store.updatePurchasedItem(item.id, { quantity: 0 });
+           // Force refresh
            setPurchasedItems(store.getPurchasedItems(currentUserPhone));
         }
      } else {
