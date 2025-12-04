@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
-import { ShoppingBag, Plus, Minus, Clock, MapPin, CheckCircle, X, Store, ChevronLeft, Trash2, User, LogOut, CheckCircle as CheckCircleIcon, LinkIcon, RefreshCw, Search, Layers, LayoutGrid, Refrigerator, History, AlertTriangle, Calendar, Trash, BookOpen, Heart, ChefHat, ListPlus, Sparkles, ClipboardList, Lock, Unlock, Bell, BellRing, Edit, Star } from '../components/ui/Icons';
+import { ShoppingBag, Plus, Minus, Clock, MapPin, CheckCircle, X, Store, ChevronLeft, Trash2, User, LogOut, CheckCircle as CheckCircleIcon, LinkIcon, RefreshCw, Search, Layers, LayoutGrid, Refrigerator, History, AlertTriangle, Calendar, Trash, BookOpen, Heart, ChefHat, ListPlus, Sparkles, ClipboardList, Lock, Unlock, Bell, BellRing, Edit, Star, Package, Truck } from '../components/ui/Icons';
 import { store, DEFAULT_CATEGORIES } from '../services/store';
 import { generateRecipe } from '../services/geminiService';
 import { Station, Product, CartItem, Order, OrderStatus, CustomerAddress, PurchasedItem, Recipe, ShoppingListItem } from '../types';
@@ -33,6 +33,11 @@ export const CustomerShop: React.FC = () => {
   const [showShoppingList, setShowShoppingList] = useState(false);
   const [shoppingList, setShoppingList] = useState<ShoppingListItem[]>([]);
   const [newListItem, setNewListItem] = useState({ name: '', quantity: 1, unit: '斤' });
+  
+  // Order Management State
+  const [showOrderList, setShowOrderList] = useState(false);
+  const [myOrders, setMyOrders] = useState<Order[]>([]);
+  const [customerOrderTab, setCustomerOrderTab] = useState<'ACTIVE' | 'HISTORY'>('ACTIVE');
   
   // Filter State
   const [searchQuery, setSearchQuery] = useState('');
@@ -94,18 +99,19 @@ export const CustomerShop: React.FC = () => {
     }
   }, [showSettings, showCheckout]);
 
-  // Load purchased items, favorites, and check station favorite status
+  // Load purchased items, favorites, orders, and check station favorite status
   useEffect(() => {
     if (currentUserPhone) {
       setPurchasedItems(store.getPurchasedItems(currentUserPhone));
       setFavoriteRecipeIds(store.getFavoriteRecipeIds(currentUserPhone));
       setShoppingList(store.getShoppingList(currentUserPhone));
+      setMyOrders(store.getCustomerOrders(currentUserPhone));
       if (stationId) {
         setIsStationFavorite(store.isStationFavorite(currentUserPhone, stationId));
       }
     }
     setRecipes(store.getRecipes());
-  }, [currentUserPhone, activeTab, orderPlaced, stationId]);
+  }, [currentUserPhone, activeTab, orderPlaced, stationId, showOrderList]);
 
   // Load Station List when modal opens
   useEffect(() => {
@@ -186,6 +192,17 @@ export const CustomerShop: React.FC = () => {
     setShowCheckout(false);
     setShowCart(false);
     setCurrentUserPhone(customerPhone); // Update current user context
+  };
+  
+  const handleConfirmReceipt = (orderId: string) => {
+    if(window.confirm("确认已收到货品吗？\n确认后菜品将自动加入“我的菜筐”。")) {
+       store.updateOrderStatus(orderId, OrderStatus.DELIVERED);
+       // Refresh order list and purchased items
+       if(currentUserPhone) {
+          setMyOrders(store.getCustomerOrders(currentUserPhone));
+          setPurchasedItems(store.getPurchasedItems(currentUserPhone));
+       }
+    }
   };
 
   // Station Favorite Handler
@@ -503,6 +520,17 @@ export const CustomerShop: React.FC = () => {
      }
   };
 
+  const activeOrderCount = myOrders.filter(o => o.status !== OrderStatus.DELIVERED).length;
+  
+  // Filter Customer Orders for Modal
+  const filteredCustomerOrders = myOrders.filter(o => {
+    if (customerOrderTab === 'ACTIVE') {
+      return o.status !== OrderStatus.DELIVERED;
+    } else {
+      return o.status === OrderStatus.DELIVERED;
+    }
+  });
+
 
   if (!station) return <div className="p-4">Loading Station...</div>;
 
@@ -512,7 +540,7 @@ export const CustomerShop: React.FC = () => {
         <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm">
           <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-gray-800 mb-2">下单成功!</h2>
-          <p className="text-gray-500 mb-6">已自动为您加入“我的菜筐”</p>
+          <p className="text-gray-500 mb-6">商家配送完成后，菜品将自动放入“我的菜筐”</p>
           <button 
             onClick={() => setOrderPlaced(false)}
             className="w-full bg-primary text-white py-3 rounded-xl font-bold"
@@ -545,6 +573,18 @@ export const CustomerShop: React.FC = () => {
                     )}
                     
                     {/* New Header Buttons */}
+                    <button 
+                       onClick={() => setShowOrderList(true)}
+                       className="relative bg-white/20 hover:bg-white/30 text-white p-2 rounded-full backdrop-blur-sm border border-white/30 transition-all"
+                       title="我的订单"
+                    >
+                       <Package size={18}/>
+                       {activeOrderCount > 0 && (
+                          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-4 h-4 flex items-center justify-center rounded-full font-bold border border-white/20">
+                             {activeOrderCount}
+                          </span>
+                       )}
+                    </button>
                     <button 
                         onClick={handleToggleStationFavorite}
                         className={`p-2 rounded-full backdrop-blur-sm border border-white/30 transition-all ${isStationFavorite ? 'bg-red-500/80 text-white border-red-400' : 'bg-white/20 hover:bg-white/30 text-white'}`}
@@ -873,6 +913,101 @@ export const CustomerShop: React.FC = () => {
             </div>
          </div>
       )}
+      
+      {/* Order List Modal (My Orders) */}
+      {showOrderList && (
+         <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col animate-in slide-in-from-right">
+            <div className="bg-white p-4 shadow-sm flex items-center justify-between sticky top-0 z-10">
+               <button onClick={() => setShowOrderList(false)} className="bg-gray-100 p-2 rounded-full">
+                  <ChevronLeft size={20}/>
+               </button>
+               <h2 className="text-lg font-bold flex items-center gap-2">
+                  <Package className="text-primary"/> 我的订单
+               </h2>
+               <div className="w-9"></div>
+            </div>
+
+            {/* Filter Tabs */}
+            <div className="flex border-b border-gray-100 bg-white px-4">
+              <button 
+                 onClick={() => setCustomerOrderTab('ACTIVE')}
+                 className={`flex-1 py-3 text-sm font-bold border-b-2 transition-colors ${customerOrderTab === 'ACTIVE' ? 'border-primary text-primary' : 'border-transparent text-gray-400'}`}
+              >
+                 进行中
+              </button>
+              <button 
+                 onClick={() => setCustomerOrderTab('HISTORY')}
+                 className={`flex-1 py-3 text-sm font-bold border-b-2 transition-colors ${customerOrderTab === 'HISTORY' ? 'border-primary text-primary' : 'border-transparent text-gray-400'}`}
+              >
+                 已完成
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+               {filteredCustomerOrders.length === 0 && (
+                  <div className="text-center py-20 text-gray-400">
+                     <Package size={48} className="mx-auto mb-2 opacity-20"/>
+                     <p>{customerOrderTab === 'ACTIVE' ? '暂无进行中的订单' : '暂无历史订单'}</p>
+                  </div>
+               )}
+
+               {filteredCustomerOrders.map(order => (
+                  <div key={order.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+                     <div className="flex justify-between items-start mb-2">
+                        <div>
+                           <span className="text-xs text-gray-500 block mb-1">
+                              {new Date(order.createdAt).toLocaleString()}
+                           </span>
+                           <span className="text-xs text-gray-400">订单号: #{order.id.slice(-6)}</span>
+                        </div>
+                        <span className={`text-xs px-2 py-1 rounded-full font-bold
+                           ${order.status === OrderStatus.DELIVERED ? 'bg-green-100 text-green-600' : 
+                             order.status === OrderStatus.SHIPPING ? 'bg-blue-100 text-blue-600' :
+                             order.status === OrderStatus.PACKED ? 'bg-yellow-100 text-yellow-600' :
+                             'bg-red-100 text-red-600'}`}
+                        >
+                           {order.status === OrderStatus.PENDING && '商家待处理'}
+                           {order.status === OrderStatus.PACKED && '待揽收'}
+                           {order.status === OrderStatus.SHIPPING && '配送中'}
+                           {order.status === OrderStatus.DELIVERED && '已送达'}
+                        </span>
+                     </div>
+
+                     <div className="space-y-2 mb-3">
+                        {order.items.slice(0, 3).map(item => (
+                           <div key={item.id} className="flex justify-between text-sm">
+                              <span>{item.name} x {item.quantity}</span>
+                              <span className="text-gray-500">¥{(item.price * item.quantity).toFixed(2)}</span>
+                           </div>
+                        ))}
+                        {order.items.length > 3 && (
+                           <div className="text-xs text-gray-400 text-center">... 还有 {order.items.length - 3} 件商品</div>
+                        )}
+                     </div>
+
+                     <div className="flex justify-between items-center border-t pt-3">
+                        <span className="font-bold text-lg">¥{order.total.toFixed(2)}</span>
+                        
+                        {order.status === OrderStatus.SHIPPING ? (
+                           <button 
+                             onClick={() => handleConfirmReceipt(order.id)}
+                             className="bg-primary text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md active:scale-95 flex items-center gap-1"
+                           >
+                              <CheckCircle size={16}/> 确认收货
+                           </button>
+                        ) : order.status === OrderStatus.DELIVERED ? (
+                           <span className="text-xs text-green-600 font-bold flex items-center gap-1">
+                              <CheckCircle size={14}/> 订单已完成
+                           </span>
+                        ) : (
+                           <span className="text-xs text-gray-400">等待商家配送</span>
+                        )}
+                     </div>
+                  </div>
+               ))}
+            </div>
+         </div>
+      )}
 
       {activeTab === 'basket' && (
         <div className="p-4 pt-6">
@@ -1132,11 +1267,11 @@ export const CustomerShop: React.FC = () => {
                         <div className="absolute bottom-3 left-3 text-white">
                            <h3 className="font-bold text-lg">{recipe.name}</h3>
                            <div className="flex gap-2 mt-1">
-                              {recipe.tags.map((tag: string) => (
+                              {recipe.tags && recipe.tags.map ? recipe.tags.map((tag: string) => (
                                  <span key={tag} className="text-[10px] bg-white/20 backdrop-blur-md px-2 py-0.5 rounded">
                                     {tag}
                                  </span>
-                              ))}
+                              )) : null}
                            </div>
                         </div>
                         <button 
@@ -1206,7 +1341,7 @@ export const CustomerShop: React.FC = () => {
                  <div className="absolute bottom-4 left-4 text-white">
                     <h2 className="text-2xl font-bold">{selectedRecipe.name}</h2>
                     <div className="flex gap-2 mt-1">
-                      {selectedRecipe.tags.map(t => <span key={t} className="text-[10px] bg-white/20 px-2 rounded backdrop-blur-md">{t}</span>)}
+                      {selectedRecipe.tags && selectedRecipe.tags.map ? selectedRecipe.tags.map(t => <span key={t} className="text-[10px] bg-white/20 px-2 rounded backdrop-blur-md">{t}</span>) : null}
                     </div>
                  </div>
               </div>
@@ -1218,7 +1353,8 @@ export const CustomerShop: React.FC = () => {
                        <ShoppingBag className="text-primary" size={20}/> 所需食材
                     </h3>
                     <div className="space-y-2 bg-gray-50 p-4 rounded-xl">
-                       {selectedRecipe.ingredients.map((ing, idx) => {
+                       {selectedRecipe.ingredients && selectedRecipe.ingredients.map ? selectedRecipe.ingredients.map((ing, idx) => {
+                          if (typeof ing !== 'object' || ing === null) return null;
                           // Check matching status from processed data
                           const isOwned = (selectedRecipe as any).ownedIngredients?.includes(ing.name);
                           return (
@@ -1236,7 +1372,7 @@ export const CustomerShop: React.FC = () => {
                                 </div>
                              </div>
                           );
-                       })}
+                       }) : <p className="text-gray-400 text-sm">暂无食材信息</p>}
                     </div>
                     {(selectedRecipe as any).missingIngredients?.length > 0 && (
                        <button 
@@ -1253,14 +1389,14 @@ export const CustomerShop: React.FC = () => {
                        <Clock className="text-primary" size={20}/> 制作步骤
                     </h3>
                     <div className="space-y-4">
-                       {selectedRecipe.steps.map((step, idx) => (
+                       {selectedRecipe.steps && selectedRecipe.steps.map ? selectedRecipe.steps.map((step, idx) => (
                           <div key={idx} className="flex gap-3">
                              <span className="shrink-0 w-6 h-6 bg-primary text-white rounded-full flex items-center justify-center text-xs font-bold mt-0.5">
                                 {idx + 1}
                              </span>
                              <p className="text-gray-700 text-sm leading-relaxed">{step}</p>
                           </div>
-                       ))}
+                       )) : <p className="text-gray-400 text-sm">暂无步骤信息</p>}
                     </div>
                  </div>
               </div>
@@ -1465,6 +1601,14 @@ export const CustomerShop: React.FC = () => {
                      </div>
                   </div>
                )}
+               
+               {/* My Orders Button */}
+               <button 
+                  onClick={() => { setShowOrderList(true); setShowSettings(false); }}
+                  className="w-full bg-blue-50 text-blue-600 py-3 rounded-xl font-bold text-center border border-blue-100 flex items-center justify-center gap-2 mb-6 shadow-sm active:scale-95 transition-transform"
+               >
+                  <Package size={18}/> 我的订单管理
+               </button>
 
                <div className="mb-6">
                   <h3 className="font-bold text-gray-700 mb-3 text-sm">地址管理</h3>

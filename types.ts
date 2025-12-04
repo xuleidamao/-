@@ -15,6 +15,7 @@ export interface Product {
   commissionRate?: number; // Percentage (0-100)
   isConsigned?: boolean;
   originalStationId?: string; // ID of the source station if consigned
+  prepTime?: number; // New: Preparation time in minutes (default 2)
 }
 
 export interface CartItem extends Product {

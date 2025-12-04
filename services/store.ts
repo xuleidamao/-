@@ -101,13 +101,85 @@ const MOCK_RECIPES: Recipe[] = [
   }
 ];
 
+// Internal Helper: Add order items to purchased items (Basket)
+const addOrderToBasket = (order: Order) => {
+    const purchasedItems = get<PurchasedItem>(PURCHASED_ITEMS_KEY);
+    const now = Date.now();
+    
+    order.items.forEach(item => {
+       const shelfLife = SHELF_LIFE_DAYS[item.category] || 7;
+       const expiryDate = now + (shelfLife * 24 * 60 * 60 * 1000);
+       
+       // Deduplication: Find ALL existing indices for this product (by ID and Phone)
+       // Strict Check: Same Product ID AND Same Customer Phone
+       const existingIndices = purchasedItems
+         .map((p, index) => (p.productId === item.id && p.customerPhone === order.customerPhone) ? index : -1)
+         .filter(i => i !== -1);
+
+       if (existingIndices.length > 0) {
+          // Merge Logic: Consolidate to the first found record
+          const targetIndex = existingIndices[0];
+          let mergedQuantity = 0;
+          let mergedThreshold = 5;
+          let mergedIsLocked = false;
+          
+          // Calculate merged values from existing records (though theoretically should be 1 after previous cleanup)
+          existingIndices.forEach(idx => {
+             const p = purchasedItems[idx];
+             if (!p.isDeleted) {
+                mergedQuantity += p.quantity;
+             }
+             if (p.isLocked) mergedIsLocked = true;
+             if (p.threshold && p.threshold !== 5) mergedThreshold = p.threshold;
+          });
+
+          const targetItem = purchasedItems[targetIndex];
+          
+          // Update the item
+          targetItem.quantity = mergedQuantity + item.quantity;
+          targetItem.isDeleted = false; // Resurrect if it was deleted
+          targetItem.isLocked = mergedIsLocked;
+          targetItem.threshold = mergedThreshold;
+          
+          // Update metadata in case product changed (e.g. image)
+          targetItem.name = item.name;
+          targetItem.image = item.image;
+          targetItem.purchaseDate = now;
+          targetItem.expiryDate = expiryDate;
+          
+          purchasedItems[targetIndex] = targetItem;
+
+          // Remove any other duplicate records that might have slipped in
+          for (let i = existingIndices.length - 1; i > 0; i--) {
+             purchasedItems.splice(existingIndices[i], 1);
+          }
+       } else {
+          // Create New Record
+          purchasedItems.push({
+            id: `pi_${now}_${Math.random().toString(36).substr(2, 9)}`,
+            productId: item.id,
+            name: item.name,
+            image: item.image,
+            category: item.category,
+            quantity: item.quantity,
+            purchaseDate: now,
+            expiryDate: expiryDate,
+            customerPhone: order.customerPhone,
+            isDeleted: false,
+            isLocked: false,
+            threshold: 5 // Default Pre-order Value
+          });
+       }
+    });
+    set(PURCHASED_ITEMS_KEY, purchasedItems);
+};
+
 export const store = {
   // Station Logic
   createStation: (name: string, owner: string, phone: string, paymentQrCode: string): Station => {
     const stations = get<Station>(STATIONS_KEY);
     
     // Generate random location offset within ~2km
-    // 0.01 deg is approx 1.1km
     const latOffset = (Math.random() - 0.5) * 0.04; 
     const lngOffset = (Math.random() - 0.5) * 0.04;
 
@@ -183,17 +255,26 @@ export const store = {
     }
   },
 
+  getStationMetrics: (stationId: string) => {
+    const orders = get<Order>(ORDERS_KEY).filter(o => o.stationId === stationId);
+    const products = get<Product>(PRODUCTS_KEY).filter(p => p.stationId === stationId);
+
+    const totalSales = orders.reduce((acc, o) => acc + o.total, 0);
+    const reputation = Math.min(5.0, 4.0 + (orders.length * 0.1)).toFixed(1); 
+    const activity = Math.min(100, 60 + (products.length * 2) + (orders.length * 1)).toFixed(0);
+
+    return { totalSales, reputation, activity };
+  },
+
   // Geo Logic
   getNearbyStations: (userLat: number, userLng: number): (Station & { distance: number, productCount: number })[] => {
     const stations = get<Station>(STATIONS_KEY);
     const products = get<Product>(PRODUCTS_KEY);
 
     return stations.map(station => {
-      // If station has no location (legacy data), assign a random one for demo
       const sLat = station.location?.lat || (MOCK_CENTER_LAT + (Math.random() - 0.5) * 0.04);
       const sLng = station.location?.lng || (MOCK_CENTER_LNG + (Math.random() - 0.5) * 0.04);
 
-      // Haversine formula for distance in km
       const R = 6371; 
       const dLat = (sLat - userLat) * Math.PI / 180;
       const dLng = (sLng - userLng) * Math.PI / 180;
@@ -208,14 +289,13 @@ export const store = {
 
       return {
         ...station,
-        location: { lat: sLat, lng: sLng }, // Ensure location exists
+        location: { lat: sLat, lng: sLng },
         distance,
         productCount
       };
     }).sort((a, b) => a.distance - b.distance);
   },
   
-  // Expose mock center for the UI to use as default user location
   getMockCenter: () => ({ lat: MOCK_CENTER_LAT, lng: MOCK_CENTER_LNG }),
 
   // Favorite Stations Logic
@@ -245,7 +325,6 @@ export const store = {
       const station = allStations.find(s => s.id === f.stationId);
       if (!station) return null;
 
-      // Distance Calc
       const sLat = station.location?.lat || MOCK_CENTER_LAT;
       const sLng = station.location?.lng || MOCK_CENTER_LNG;
       const R = 6371; 
@@ -258,7 +337,6 @@ export const store = {
       const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
       const distance = R * c;
 
-      // Stats
       const stationProducts = products.filter(p => p.stationId === station.id && p.isAvailable !== false);
       const stationOrders = orders.filter(o => o.stationId === station.id);
 
@@ -278,7 +356,6 @@ export const store = {
     
     if (!currentStation) return { success: false, message: '当前站点不存在' };
 
-    // Find station with matching QR code
     const partner = stations.find(s => s.paymentQrCode === qrCodeData && s.id !== currentStationId);
 
     if (!partner) {
@@ -305,6 +382,7 @@ export const store = {
   addProduct: (product: Product) => {
     const products = get<Product>(PRODUCTS_KEY);
     product.isAvailable = product.isAvailable !== undefined ? product.isAvailable : true;
+    product.prepTime = product.prepTime !== undefined ? product.prepTime : 2; 
     products.push(product);
     set(PRODUCTS_KEY, products);
   },
@@ -326,7 +404,6 @@ export const store = {
 
   findProductByIngredient: (stationId: string, ingredientName: string): Product | undefined => {
     const products = get<Product>(PRODUCTS_KEY).filter(p => p.stationId === stationId && p.isAvailable !== false);
-    // Simple fuzzy match: check if product name contains ingredient or vice versa
     return products.find(p => p.name.includes(ingredientName) || ingredientName.includes(p.name));
   },
 
@@ -348,7 +425,8 @@ export const store = {
       stationId: currentStationId,
       originalStationId: product.stationId,
       isConsigned: true,
-      isAvailable: true
+      isAvailable: true,
+      prepTime: product.prepTime
     };
 
     products.push(newProduct);
@@ -363,80 +441,44 @@ export const store = {
     ).length;
   },
 
+  // Consignment Supply Task Logic
+  getConsignmentTasks: (stationId: string) => {
+    const orders = get<Order>(ORDERS_KEY);
+    const allStations = get<Station>(STATIONS_KEY);
+    const tasks: any[] = [];
+    
+    orders.forEach(order => {
+        if (order.status === OrderStatus.DELIVERED) return; 
+
+        order.items.forEach(item => {
+            if (item.originalStationId === stationId) {
+                const sellingStation = allStations.find(s => s.id === order.stationId);
+                const prepTime = item.prepTime || 2;
+                tasks.push({
+                    orderId: order.id,
+                    itemId: item.id,
+                    name: item.name,
+                    quantity: item.quantity,
+                    unit: item.unit,
+                    image: item.image,
+                    sellingStationName: sellingStation?.stationName || '未知站点',
+                    orderTime: order.createdAt,
+                    dueTime: order.createdAt + (prepTime * 60 * 1000),
+                    status: order.status
+                });
+            }
+        });
+    });
+    return tasks.sort((a, b) => a.dueTime - b.dueTime);
+  },
+
   // Order Logic
   createOrder: (order: Order) => {
     const orders = get<Order>(ORDERS_KEY);
     orders.push(order);
     set(ORDERS_KEY, orders);
-
-    // Side Effect: Add to Purchased Items (Basket)
-    const purchasedItems = get<PurchasedItem>(PURCHASED_ITEMS_KEY);
-    const now = Date.now();
-    
-    order.items.forEach(item => {
-       const shelfLife = SHELF_LIFE_DAYS[item.category] || 7;
-       const expiryDate = now + (shelfLife * 24 * 60 * 60 * 1000);
-       
-       // Deduplication: Find ALL existing indices for this product (by ID and Phone)
-       // This ensures we merge into one record per product type
-       const existingIndices = purchasedItems
-         .map((p, index) => (p.productId === item.id && p.customerPhone === order.customerPhone) ? index : -1)
-         .filter(i => i !== -1);
-
-       if (existingIndices.length > 0) {
-          // Merge Logic: Sum quantity of non-deleted duplicates to ensure accurate count
-          const targetIndex = existingIndices[0];
-          let mergedQuantity = 0;
-          let mergedThreshold = 5;
-          let mergedIsLocked = false;
-          
-          existingIndices.forEach(idx => {
-             const p = purchasedItems[idx];
-             if (!p.isDeleted) {
-                mergedQuantity += p.quantity;
-             }
-             if (p.isLocked) mergedIsLocked = true;
-             if (p.threshold && p.threshold !== 5) mergedThreshold = p.threshold;
-          });
-
-          const targetItem = purchasedItems[targetIndex];
-          
-          // Update the item
-          targetItem.quantity = mergedQuantity + item.quantity;
-          targetItem.isDeleted = false; // Resurrect
-          targetItem.isLocked = mergedIsLocked;
-          targetItem.threshold = mergedThreshold;
-          
-          targetItem.name = item.name;
-          targetItem.image = item.image;
-          targetItem.purchaseDate = now;
-          targetItem.expiryDate = expiryDate;
-          
-          purchasedItems[targetIndex] = targetItem;
-
-          // Remove other duplicates to enforce single record
-          for (let i = existingIndices.length - 1; i > 0; i--) {
-             purchasedItems.splice(existingIndices[i], 1);
-          }
-       } else {
-          // Create New
-          purchasedItems.push({
-            id: `pi_${now}_${Math.random().toString(36).substr(2, 9)}`,
-            productId: item.id,
-            name: item.name,
-            image: item.image,
-            category: item.category,
-            quantity: item.quantity,
-            purchaseDate: now,
-            expiryDate: expiryDate,
-            customerPhone: order.customerPhone,
-            isDeleted: false,
-            isLocked: false,
-            threshold: 5 // Default Pre-order Value (预购值)
-          });
-       }
-    });
-    set(PURCHASED_ITEMS_KEY, purchasedItems);
+    // NOTE: We no longer add items to purchasedItems here. 
+    // It is done only when status becomes DELIVERED in updateOrderStatus.
   },
 
   getOrders: (stationId: string): Order[] => {
@@ -444,13 +486,26 @@ export const store = {
       .filter(o => o.stationId === stationId)
       .sort((a, b) => b.createdAt - a.createdAt);
   },
+  
+  // New: Get Orders for Customer
+  getCustomerOrders: (customerPhone: string): Order[] => {
+    return get<Order>(ORDERS_KEY)
+      .filter(o => o.customerPhone === customerPhone)
+      .sort((a, b) => b.createdAt - a.createdAt);
+  },
 
   updateOrderStatus: (orderId: string, status: OrderStatus) => {
     const orders = get<Order>(ORDERS_KEY);
     const index = orders.findIndex(o => o.id === orderId);
     if (index !== -1) {
+      const oldStatus = orders[index].status;
       orders[index].status = status;
       set(ORDERS_KEY, orders);
+
+      // Trigger "Add to Basket" only when order is marked as DELIVERED
+      if (status === OrderStatus.DELIVERED && oldStatus !== OrderStatus.DELIVERED) {
+         addOrderToBasket(orders[index]);
+      }
     }
   },
 
@@ -494,8 +549,8 @@ export const store = {
           currentList.push({
             id: Date.now().toString() + count,
             name: item.name,
-            quantity: (item.threshold || 5) - item.quantity, // Suggest amount to refill to Pre-order Value
-            unit: '份' // Default unit
+            quantity: (item.threshold || 5) - item.quantity, 
+            unit: '份' 
           });
           count++;
         }
