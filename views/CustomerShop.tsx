@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { ShoppingBag, Plus, Minus, Clock, MapPin, CheckCircle, X, Store, ChevronLeft, Trash2, User, LogOut, CheckCircle as CheckCircleIcon, LinkIcon, RefreshCw, Search, Layers, LayoutGrid, Refrigerator, History, AlertTriangle, Calendar, Trash, BookOpen, Heart, ChefHat, ListPlus, Sparkles, ClipboardList, Lock, Unlock, Bell, BellRing, Edit, Star, Package, Truck } from '../components/ui/Icons';
@@ -1601,14 +1600,6 @@ export const CustomerShop: React.FC = () => {
                      </div>
                   </div>
                )}
-               
-               {/* My Orders Button */}
-               <button 
-                  onClick={() => { setShowOrderList(true); setShowSettings(false); }}
-                  className="w-full bg-blue-50 text-blue-600 py-3 rounded-xl font-bold text-center border border-blue-100 flex items-center justify-center gap-2 mb-6 shadow-sm active:scale-95 transition-transform"
-               >
-                  <Package size={18}/> 我的订单管理
-               </button>
 
                <div className="mb-6">
                   <h3 className="font-bold text-gray-700 mb-3 text-sm">地址管理</h3>
