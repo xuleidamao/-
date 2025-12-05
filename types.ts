@@ -61,6 +61,7 @@ export interface Station {
   avatar: string;
   address?: string;      // New: Shop Address
   paymentQrCode?: string; // New: Payment QR Code Base64
+  headerImage?: string;   // New: Header Background Image
   partners?: string[];    // New: List of partner station IDs
   phone?: string;         // New: Owner Phone
   location?: Location;    // New: Geo Location

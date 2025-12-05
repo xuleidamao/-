@@ -54,8 +54,10 @@ export const ManagerDashboard: React.FC = () => {
   // Settings State
   const [shopAddress, setShopAddress] = useState('');
   const [qrCodeImage, setQrCodeImage] = useState('');
+  const [headerImage, setHeaderImage] = useState('');
   const [locationStatus, setLocationStatus] = useState<{lat: number, lng: number} | null>(null);
   const qrInputRef = useRef<HTMLInputElement>(null);
+  const headerInputRef = useRef<HTMLInputElement>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved'>('idle');
 
   useEffect(() => {
@@ -65,6 +67,7 @@ export const ManagerDashboard: React.FC = () => {
       if (s) {
         setShopAddress(s.address || '');
         setQrCodeImage(s.paymentQrCode || '');
+        setHeaderImage(s.headerImage || '');
         if (s.location) {
           setLocationStatus(s.location);
         }
@@ -259,6 +262,26 @@ export const ManagerDashboard: React.FC = () => {
     }
   };
 
+  const handleHeaderUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+        try {
+          const compressed = await compressImage(file);
+          setHeaderImage(compressed);
+        } catch (err) {
+          console.error(err);
+          alert("图片处理失败");
+        }
+    }
+  };
+
+  const handleGenerateHeaderImage = () => {
+     if (!station) return;
+     const encodedName = encodeURIComponent(station.stationName + " fresh vegetable market banner background aesthetic high quality");
+     const imageUrl = `https://image.pollinations.ai/prompt/${encodedName}?width=800&height=400&nologo=true&seed=${Math.floor(Math.random()*1000)}`;
+     setHeaderImage(imageUrl);
+  };
+
   // Partner Logic
   const handlePartnerQrScan = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -308,6 +331,7 @@ export const ManagerDashboard: React.FC = () => {
       store.updateStation(stationId, {
         address: shopAddress,
         paymentQrCode: qrCodeImage,
+        headerImage: headerImage,
         location: locationStatus || undefined
       });
       setStation(store.getStation(stationId)); // Update local state
@@ -1378,6 +1402,38 @@ export const ManagerDashboard: React.FC = () => {
                        </button>
                     </div>
                     {locationStatus && <p className="text-[10px] text-green-600 mt-1 flex items-center gap-1"><CheckCircle size={10}/> 已获取地理位置</p>}
+                 </div>
+                 
+                 {/* Header Image Setting */}
+                 <div>
+                    <label className="text-xs font-bold text-gray-500 mb-1 block">店铺招牌背景</label>
+                    <div 
+                       onClick={() => headerInputRef.current?.click()}
+                       className="border-2 border-dashed border-gray-200 rounded-xl flex flex-col items-center justify-center text-gray-400 cursor-pointer hover:bg-gray-50 hover:border-primary transition-colors h-32 relative overflow-hidden mb-2"
+                    >
+                       {headerImage ? (
+                          <img src={headerImage} className="w-full h-full object-cover" alt="Header"/>
+                       ) : (
+                          <>
+                             <ImageIcon size={24} className="mb-2"/>
+                             <span className="text-xs">点击上传背景图</span>
+                          </>
+                       )}
+                       <input 
+                         type="file" 
+                         ref={headerInputRef} 
+                         accept="image/*" 
+                         className="hidden" 
+                         onChange={handleHeaderUpload}
+                       />
+                    </div>
+                    <button 
+                        type="button" 
+                        onClick={handleGenerateHeaderImage}
+                        className="w-full bg-purple-50 text-purple-600 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 hover:bg-purple-100 transition-colors"
+                    >
+                        <Wand2 size={14}/> AI 一键生成招牌
+                    </button>
                  </div>
 
                  <div>

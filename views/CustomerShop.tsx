@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { ShoppingBag, Plus, Minus, Clock, MapPin, CheckCircle, X, Store, ChevronLeft, Trash2, User, LogOut, CheckCircle as CheckCircleIcon, LinkIcon, RefreshCw, Search, Layers, LayoutGrid, Refrigerator, History, AlertTriangle, Calendar, Trash, BookOpen, Heart, ChefHat, ListPlus, Sparkles, ClipboardList, Lock, Unlock, Bell, BellRing, Edit, Star, Package, Truck } from '../components/ui/Icons';
@@ -560,7 +561,12 @@ export const CustomerShop: React.FC = () => {
             {/* ... Shop Header & Content ... */}
             <div className="bg-white sticky top-0 z-10 shadow-sm">
                 <div className="relative h-36 bg-green-600 overflow-hidden">
-                    <div className="absolute inset-0 bg-black/20"></div>
+                    {station.headerImage ? (
+                       <img src={station.headerImage} className="absolute inset-0 w-full h-full object-cover z-0" alt="header" />
+                    ) : (
+                       <div className="absolute inset-0 bg-gradient-to-r from-green-600 to-teal-700 z-0"></div>
+                    )}
+                    <div className="absolute inset-0 bg-black/20 z-10"></div>
                     <div className="absolute top-4 right-4 z-30 flex gap-2">
                     {isPreview && (
                         <button 
